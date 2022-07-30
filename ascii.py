@@ -24,7 +24,7 @@ ii_name = "Frame"               # input file name prefix
 loaderState = False
 
 def listFilesFromAssets():
-    listOfImages = os.listdir("./assets/")
+    listOfImages = os.listdir("./assets/input/")
     index = 1
 
     print("Available choice -> \n")
