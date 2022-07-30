@@ -1,4 +1,6 @@
+import os
 from PIL import Image, ImageDraw, ImageFont
+import climage
 
 import math
 
@@ -20,26 +22,39 @@ ii_name = "Frame"               # input file name prefix
 count = 1
 
                                 # set the number of frames to be extracted manually or add the dir list count method to automate
-for i in range(0,2092):         # dont look at this, probably could have done better using mod or just dividing length
-    if (count < 10):
-        input_name = ii_name + "0000" + str(count) + ".png"
-        output_name = oi_name + "0000" + str(count) + ".jpg"
-    elif(count >= 10 and count < 100):
-        input_name = ii_name + "000" + str(count) + ".png"
-        output_name = oi_name + "000" + str(count) + ".jpg"
-    elif(count >= 100 and count < 1000):
-        input_name = ii_name + "00" + str(count) + ".png"
-        output_name = oi_name + "00" + str(count) + ".jpg"
-    elif(count >= 1000 and count < 10000):
-        input_name = ii_name + "0" + str(count) + ".png"
-        output_name = oi_name + "0" + str(count) + ".jpg"
-    elif(count >= 10000 and count < 100000):
-        input_name = ii_name + "" + str(count) + ".png"
-        output_name = oi_name + "" + str(count) + ".jpg"
+# for i in range(0,2092):         # dont look at this, probably could have done better using mod or just dividing length
+    # if (count < 10):
+    #     input_name = ii_name + "0000" + str(count) + ".png"
+    #     output_name = oi_name + "0000" + str(count) + ".jpg"
+    # elif(count >= 10 and count < 100):
+    #     input_name = ii_name + "000" + str(count) + ".png"
+    #     output_name = oi_name + "000" + str(count) + ".jpg"
+    # elif(count >= 100 and count < 1000):
+    #     input_name = ii_name + "00" + str(count) + ".png"
+    #     output_name = oi_name + "00" + str(count) + ".jpg"
+    # elif(count >= 1000 and count < 10000):
+    #     input_name = ii_name + "0" + str(count) + ".png"
+    #     output_name = oi_name + "0" + str(count) + ".jpg"
+    # elif(count >= 10000 and count < 100000):
+    #     input_name = ii_name + "" + str(count) + ".png"
+    #     output_name = oi_name + "" + str(count) + ".jpg"
 
-    text_file = open("100.txt", "w")        # can obtain txt output, but frame rate is not constant
+def listFilesFromAssets():
+    listOfImages = os.listdir("./assets/")
+    index = 1
 
-    im = Image.open(input_name)
+    print("Available choice -> \n")
+    print("_________________________________________________\n")
+    for image in listOfImages:
+        print("[%d] - %s" % (index, image))
+        index += 1
+    print("\n_________________________________________________")
+    index = int(input("Enter the choice : "))
+    return listOfImages[index-1]
+
+def convertImage(input_name):
+    im = Image.open("./assets/" + input_name)
+    text_file = open(".txt", "w")        # can obtain txt output, but frame rate is not constant
 
     fnt = ImageFont.truetype('C:\\Windows\\Fonts\\lucon.ttf', 15)   #trust me on this, modify if necessary
 
@@ -60,6 +75,23 @@ for i in range(0,2092):         # dont look at this, probably could have done be
             d.text((j*oneCharWidth, i*oneCharHeight), getChar(h), font = fnt, fill = (r, g, b))
 
         text_file.write('\n')
-
+    output_name = "./assets/output/OUTPUT_" + input_name 
     outputImage.save(output_name)
-    count = count + 3                   # adjust to the number of frames per frame of the original video, i took one frames for 3
+    # count = count + 3                   # adjust to the number of frames per frame of the original video, i took one frames for 3
+
+
+def __main():
+    imageName = [listFilesFromAssets()]
+
+    print(imageName[0])
+    convertImage(imageName[0])
+    
+    # if index <= 0 or index > list:
+        # print("[ERROR] - index out of bounds")
+        # exit
+    # else:
+        # convertImage(list[index - 1])
+    # convertImage(list[index - 1])
+    # print(list[index-1])
+
+__main()
