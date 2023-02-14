@@ -1,122 +1,183 @@
 import os
-import time
 import sys
-from PIL import Image, ImageDraw, ImageFont
-import climage
-
 import math
 
-# chars = "$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,\"^`'. "[
-#         ::-1]  # ASCII values, can add if better gradient is found
-# charArray = list(chars)
-charArray = [' ', '`', '¨', '·', '¸', '.', '-', "'", ',', '¹', ':', '_', '¯', '~', '¬', '¦', ';', '¡', '!', '÷', '*',
-             '*', 'ı', '|', '+', '<', '>', '/', '=', '»', '«', 'ì', 'í', 'ï', 'i', '^', 'º', 'r', 'L', 'ª', '®', 'ī',
-             'ĩ', 'î', 'ĭ', 'l', '¿', 'J', '×', 'v', '?', 'c', 'į', ')', 'Ĺ', 'Ŀ', '(', 'Y', 'T', 'Ļ', 'Ľ', 'ĺ', '7',
-             '¤', 't', 'ľ', 'ŀ', 'Ł', '}', '{', 'F', 'ċ', 'ļ', 's', 'ĸ', 'Ý', '[', 'x', 'ć', 'z', 'ç', '1', 'I', ']',
-             'ł', 'j', 'Ĵ', 'C', 'y', 'V', '£', '5', '2', 'f', '3', 'ĉ', 'č', 'n', 'Ì', 'Í', 'İ', '¢', 'ĵ', 'U', 'X',
-             'Ć', 'Z', 'Ċ', 'S', 'u', 'Ï', 'Þ', 'P', 'Į', 'Ç', 'K', 'A', 'o', 'ÿ', 'ý', 'a', 'e', '4', 'Ĭ', 'E', 'Î',
-             'Č', 'Ĉ', 'Ī', 'Ĩ', 'Ú', 'Ù', 'ń', 'ņ', 'ŉ', 'k', 'Ü', 'Á', 'À', 'ù', 'ú', 'ü', '¥', 'ė', 'w', 'H', 'È',
-             'É', 'Ä', 'Å', 'ö', 'Ė', 'ò', 'G', 'ó', 'Ķ', 'ä', 'Û', 'á', 'à', 'Ą', 'ë', 'é', 'è', 'h', 'ą', 'ę', 'Ë',
-             'å', 'ñ', 'ň', 'Ę', 'O', 'Ă', '$', 'Â', 'û', 'Ĕ', 'Ā', 'Ě', 'Ê', 'Ã', 'Æ', 'R', 'ā', 'D', 'ē', 'ķ', 'õ',
-             '½', 'Ē', 'p', 'ã', 'ô', 'ă', 'Ġ', 'â', 'ĕ', '9', '6', 'ê', 'ě', 'q', '¼', 'Ĳ', 'm', 'N', '%', '0', 'Ģ',
-             'ħ', 'b', 'Ò', 'Ó', '#', 'ø', 'd', 'Ö', 'Ĥ', 'Ğ', '§', 'Ĝ', 'W', 'M', 'B', 'æ', 'Ð', 'Đ', 'Q', 'Ô', '©',
-             'Ń', 'Ħ', '8', 'ĥ', 'Õ', 'g', 'Ď', 'Ņ', 'ĳ', 'đ', 'ß', 'þ', 'Ň', 'ð', '@', 'Ŋ', 'Ñ', '¾', 'ġ', 'Ø', 'ģ',
-             'ď', 'ğ', '&', 'ĝ']
+from PIL import Image, ImageDraw, ImageFont
+
+char_array = [
+                ' ', '`', '¨', '·', '¸', '.', '-', "'", ',', '¹', ':', '_', '¯', '~', 
+                '¬', '¦', ';', '¡', '!', '÷', '*', '*', 'ı', '|', '+', '<', '>', '/', 
+                '=', '»', '«', 'ì', 'í', 'ï', 'i', '^', 'º', '_r', 'L', 'ª', '®', 'ī',
+                'ĩ', 'î', 'ĭ', 'l', '¿', 'J', '×', 'v', '?', 'c', 'į', ')', 'Ĺ', 'Ŀ', 
+                '(', 'Y', 'T', 'Ļ', 'Ľ', 'ĺ', '7', '¤', 't', 'ľ', 'ŀ', 'Ł', '}', '{', 
+                'F', 'ċ', 'ļ', 's', 'ĸ', 'Ý', '[', 'x', 'ć', 'z', 'ç', '1', 'I', ']',
+                'ł', 'j', 'Ĵ', 'C', 'y', 'V', '£', '5', '2', 'f', '3', 'ĉ', 'č', 'n', 
+                'Ì', 'Í', 'İ', '¢', 'ĵ', 'U', 'X', 'Ć', 'Z', 'Ċ', 'S', 'u', 'Ï', 'Þ', 
+                'P', 'Į', 'Ç', 'K', 'A', 'o', 'ÿ', 'ý', 'a', 'e', '4', 'Ĭ', 'E', 'Î', 
+                'Č', 'Ĉ', 'Ī', 'Ĩ', 'Ú', 'Ù', 'ń', 'ņ', 'ŉ', 'k', 'Ü', 'Á', 'À', 'ù', 
+                'ú', 'ü', '¥', 'ė', 'w', 'H', 'È', 'É', 'Ä', 'Å', 'ö', 'Ė', 'ò', 'G', 
+                'ó', 'Ķ', 'ä', 'Û', 'á', 'à', 'Ą', 'ë', 'é', 'è', '_h', 'ą', 'ę', 'Ë', 
+                'å', 'ñ', 'ň', 'Ę', 'O', 'Ă', '$', 'Â', 'û', 'Ĕ', 'Ā', 'Ě', 'Ê', 'Ã', 
+                'Æ', 'R', 'ā', 'D', 'ē', 'ķ', 'õ', '½', 'Ē', 'p', 'ã', 'ô', 'ă', 'Ġ', 
+                'â', 'ĕ', '9', '6', 'ê', 'ě', 'q', '¼', 'Ĳ', 'm', 'N', '%', '0', 'Ģ', 
+                'ħ', '_b', 'Ò', 'Ó', '#', 'ø', '_d', 'Ö', 'Ĥ', 'Ğ', '§', 'Ĝ', 'W', 'M', 
+                'B', 'æ', 'Ð', 'Đ', 'Q', 'Ô', '©', 'Ń', 'Ħ', '8', 'ĥ', 'Õ', '_g', 'Ď', 
+                'Ņ', 'ĳ', 'đ', 'ß', 'þ', 'Ň', 'ð', '@', 'Ŋ', 'Ñ', '¾', 'ġ', 'Ø', 'ģ', 
+                'ď', 'ğ', '&', 'ĝ'
+            ]
 
 
-charLength = len(charArray)
-interval = charLength / 256
+CHAR_LENGTH = len(char_array)   # The number of characters in the char_array
+INTERVAL = CHAR_LENGTH / 256    
 
-# scaleFactor = 0.2                               # the scale of the output image after converting the original's,
-# read first comment
-oneCharWidth = 10
-oneCharHeight = 18
+ONE_CHAR_WIDTH = 10
+ONE_CHAR_HEIGHT = 18
+
+OUTPUT_IMAGE_PREFIX = "FrameOut"  # output image file name prefix
+INPUT_FILE_PREFIX = "Frame"  # input file name prefix
+
+LOADER_STATE = False
+
+def get_char(input_int):
+    """
+    Returns a character from the `char_array` list based on the given `input_int` 
+    which represents the brightness value of the pixel at hand
+
+    Args:
+        input_int (int): The brightness value (grayscale) of a pixel that is being worked on
+
+    Returns:
+        A character (string) from the `char_array` list
+    """
+    return char_array[math.floor(input_int * INTERVAL)]
 
 
-def getChar(inputInt):
-    return charArray[math.floor(inputInt * interval)]
 
 
-oi_name = "FrameOut"  # output image file name prefix
-ii_name = "Frame"  # input file name prefix
+def list_files_from_assets():
+    """
+    Lists all the image file available in the "./assets/input/" directory,
+    prompts the user to select one of them, and returns the name of the selected file.
 
-loaderState = False
+    Returns:
+        A string that represents the name of the selected image file.
 
+    Example:
+        If the "./assets/input/" directory contains three image files:
 
-def listFilesFromAssets():
-    listOfImages = os.listdir("./assets/input/")
+            "image1.jpg", "image2.jpg" and "image3.jpg"
+        
+        then calling `list_files_from_assets()` will output:
+        
+        Available choice -> 
+
+        _________________________________________________
+
+        1 - image1.jpg
+        2 - image2.jpg
+        3 - image3.jpg
+
+        _________________________________________________
+
+        The user will be prompted to enter a choice, and if they enter "2", the function
+        will return "image2.jpg".
+    """
+    list_of_images = os.listdir("./assets/input/")
     index = 1
 
     print("Available choice -> \n")
-    printDivider()
-    for image in listOfImages:
-        print("[%d] - %s" % (index, image))
+    print_divider()
+    for image in list_of_images:
+        print(f"{index} - {image}")
         index += 1
-    printDivider()
+    print_divider()
     index = int(input("Enter the choice : "))
-    return listOfImages[index - 1]
+    return list_of_images[index - 1]
 
 
-def convertImage(input_name, scaleFactor=0.2, bgBrightness=30):
-    im = Image.open("./assets/input/" + input_name)
-    # text_file = open(".txt", "w")  # can obtain txt output, but frame rate is not constant
+def convert_image(input_name, scale_factor=0.2, bg_brightness=30):
+    """
+    Converts an image file to an ASCII art representation, and saves the output
+    image to the "./assets/output/" directory with a filename that includes the 
+    chosen parameters and the input filename.
 
-    fnt = ImageFont.truetype('C:\\Windows\\Fonts\\lucon.ttf', bgBrightness)  # trust me on this, modify if necessary
+    Args:
+        input_name (str):   The name of the image file to be converted, including the 
+                            file extension.
+        scale_factor (float):   The scaling factor for the output image. Default is 0.2,
+                                which means the output image will be 20% of the size of the
+                                input image times the width and height of one character
+        bg_brightness (int):    The brightness level of the output image background. Default is 
+                                30, which is close to medium gray
 
-    width, height = im.size
-    im = im.resize((int(scaleFactor * width), int(scaleFactor * height * (oneCharWidth / oneCharHeight))),
-                   Image.NEAREST)
-    width, height = im.size
-    pix = im.load()
+    Returns:
+        None. The output image is saved to a file
 
-    outputImage = Image.new('RGB', (oneCharWidth * width, oneCharHeight * height),
-                            color=(bgBrightness, bgBrightness, bgBrightness))  # (0,0,0) for polychromatic images
-    d = ImageDraw.Draw(outputImage)
+    Example:
+        If the "./assets/input/" directory contains an image file called "image1.jpg", calling
+        `convert_image("iamge1.jpg", 0.1, 50)` will create an ASCII art representation of the image
+        with a scale factor of 0.1 and a background brightness level of 50, and save the output image to
+        "./assets/output/O_h:50_f_0.1_image1.jpg".
+    """
 
-    loaderState = True
+    _im = Image.open("./assets/input/" + input_name)
+
+    # trust me on this, modify if necessary
+    fnt = ImageFont.truetype('C:\\Windows\\Fonts\\lucon.ttf', bg_brightness)
+
+    width, height = _im.size
+    _im = _im.resize(
+        (
+            int(scale_factor * width), 
+            int(scale_factor * height * (ONE_CHAR_WIDTH / ONE_CHAR_HEIGHT))
+        ),
+        Image.NEAREST
+    )
+    width, height = _im.size
+    pix = _im.load()
+
+    output_image = Image.new(
+        'RGB', 
+        (ONE_CHAR_WIDTH * width, ONE_CHAR_HEIGHT * height),
+        color=(bg_brightness, bg_brightness, bg_brightness)
+    )  # (0,0,0) for polychromatic images
+
+    _d = ImageDraw.Draw(output_image)
+
+    LOADER_STATE = True
     for i in range(height):
         for j in range(width):
             loader(((i * width) + j), (height * width))
-            r, g, b = pix[j, i]
-            h = int(r / 3 + g / 3 + b / 3)
-            pix[j, i] = (h, h, h)
-            # text_file.write(getChar(h))
-            d.text((j * oneCharWidth, i * oneCharHeight), getChar(h), font=fnt, fill=(r, g, b))
+            _r, _g, _b = pix[j, i]
+            _h = int(_r / 3 + _g / 3 + _b / 3)
+            pix[j, i] = (_h, _h, _h)
+            _d.text((j * ONE_CHAR_WIDTH, i * ONE_CHAR_HEIGHT),
+                   get_char(_h), font=fnt, fill=(_r, _g, _b))
 
-        # text_file.write('\n')
-    output_name = "./assets/output/OUTPUT_" + "bgBrightness_" + str(bgBrightness) + "_factor_" + str(
-        scaleFactor) + "_" + input_name
-    outputImage.save(output_name)
-    # count = count + 3                   # adjust to the number of frames per frame of the original video,
-    # i took one frames for 3
+    output_name = f"./assets/output/O_h_{str(bg_brightness)}_f_{str(scale_factor)}_{input_name}"
+    output_image.save(output_name)
 
-
-def printDivider():
+def print_divider():
     print("\n_________________________________________________")
 
-
 def loader(count, total):
-    sys.stdout.write("\r" + "processing - " + str((count / total) * 100) + "\t%")
-    # print()
-
+    sys.stdout.write(f"\rprocessing - {str((count / total) * 100)}\t%")
 
 def __main():
-    imageName = listFilesFromAssets()
+    image_name = list_files_from_assets()
 
-    print(imageName)
-    printDivider()
-    print("Factor of conversion (higher factor will lead to larger image size and greater render time))")
+    print(image_name)
+    print_divider()
+    print("Factor : higher factor will lead to larger image size and greater render time")
     factor = float(input("Factor input [0-1] - "))
-    printDivider()
+    print_divider()
     print("BG color will be black if not modified")
     choice = input("If it is required to change the output [y/N] - ")
     print()
     if choice.capitalize() == "Y":
-        bgBrightness = int(input("Enter brightness factor [range-range] - "))
-        convertImage(imageName, factor, bgBrightness)
+        bg_brightness = int(input("Enter brightness factor [range-range] - "))
+        convert_image(image_name, factor, bg_brightness)
     else:
-        convertImage(imageName, factor)
-    # loader(15,100)
-
+        convert_image(image_name, factor)
 
 __main()
