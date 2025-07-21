@@ -122,8 +122,18 @@ def convert_image(input_name, scale_factor=0.2, bg_brightness=30):
 
     _im = Image.open("./assets/input/" + input_name)
 
-    # trust me on this, modify if necessary
-    fnt = ImageFont.truetype('C:\\Windows\\Fonts\\lucon.ttf', bg_brightness)
+    # Try to load a monospaced font from common locations. Fallback to the
+    # default Pillow font if none of the paths exist.
+    def _load_font():
+        windows_font = r"C:\\Windows\\Fonts\\lucon.ttf"
+        linux_font = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
+        if os.path.exists(windows_font):
+            return ImageFont.truetype(windows_font, ONE_CHAR_HEIGHT)
+        if os.path.exists(linux_font):
+            return ImageFont.truetype(linux_font, ONE_CHAR_HEIGHT)
+        return ImageFont.load_default()
+
+    fnt = _load_font()
 
     width, height = _im.size
     _im = _im.resize(
