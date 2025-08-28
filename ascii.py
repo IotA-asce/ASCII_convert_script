@@ -1,3 +1,4 @@
+import argparse
 import os
 import sys
 import math
@@ -95,32 +96,35 @@ def list_files_from_assets():
     return list_of_images[index - 1]
 
 
-def convert_image(input_name, scale_factor=0.2, bg_brightness=30):
+def convert_image(input_name, scale_factor=0.2, bg_brightness=30, output_dir="./assets/output"):
     """
     Converts an image file to an ASCII art representation, and saves the output
-    image to the "./assets/output/" directory with a filename that includes the 
-    chosen parameters and the input filename.
+    image to ``output_dir`` with a filename that includes the chosen parameters
+    and the input filename.
 
     Args:
-        input_name (str):   The name of the image file to be converted, including the 
+        input_name (str):   The name of the image file to be converted, including the
                             file extension.
         scale_factor (float):   The scaling factor for the output image. Default is 0.2,
                                 which means the output image will be 20% of the size of the
-                                input image times the width and height of one character
-        bg_brightness (int):    The brightness level of the output image background. Default is 
-                                30, which is close to medium gray
+                                input image times the width and height of one character.
+        bg_brightness (int):    The brightness level of the output image background. Default is
+                                30, which is close to medium gray.
+        output_dir (str):   Directory where the resulting image will be saved.
+                            Defaults to ``./assets/output``.
 
     Returns:
-        None. The output image is saved to a file
+        None. The output image is saved to a file.
 
     Example:
-        If the "./assets/input/" directory contains an image file called "image1.jpg", calling
-        `convert_image("iamge1.jpg", 0.1, 50)` will create an ASCII art representation of the image
-        with a scale factor of 0.1 and a background brightness level of 50, and save the output image to
-        "./assets/output/O_h:50_f_0.1_image1.jpg".
+        If the "./assets/input/" directory contains an image file called
+        ``image1.jpg``, calling ``convert_image("image1.jpg", 0.1, 50)`` will
+        create an ASCII art representation of the image with a scale factor of
+        0.1 and a background brightness level of 50, and save the output image
+        to ``./assets/output/O_h:50_f_0.1_image1.jpg``.
     """
 
-    _im = Image.open("./assets/input/" + input_name)
+    _im = Image.open(os.path.join("./assets/input", input_name))
 
     # Try to load a monospaced font from common locations. Fallback to the
     # default Pillow font if none of the paths exist.
@@ -164,7 +168,10 @@ def convert_image(input_name, scale_factor=0.2, bg_brightness=30):
             _d.text((j * ONE_CHAR_WIDTH, i * ONE_CHAR_HEIGHT),
                    get_char(_h), font=fnt, fill=(_r, _g, _b))
 
-    output_name = f"./assets/output/O_h_{str(bg_brightness)}_f_{str(scale_factor)}_{input_name}"
+    os.makedirs(output_dir, exist_ok=True)
+    output_name = os.path.join(
+        output_dir, f"O_h_{str(bg_brightness)}_f_{str(scale_factor)}_{input_name}"
+    )
     output_image.save(output_name)
 
 def print_divider():
@@ -173,21 +180,59 @@ def print_divider():
 def loader(count, total):
     sys.stdout.write(f"\rprocessing - {str((count / total) * 100)}\t%")
 
-def __main():
-    image_name = list_files_from_assets()
 
-    print(image_name)
-    print_divider()
-    print("Factor : higher factor will lead to larger image size and greater render time")
-    factor = float(input("Factor input [0-1] - "))
-    print_divider()
-    print("BG color will be black if not modified")
-    choice = input("If it is required to change the output [y/N] - ")
-    print()
-    if choice.capitalize() == "Y":
-        bg_brightness = int(input("Enter brightness factor [range-range] - "))
-        convert_image(image_name, factor, bg_brightness)
-    else:
-        convert_image(image_name, factor)
+def parse_args():
+    parser = argparse.ArgumentParser(description="Convert images to ASCII art")
+    parser.add_argument("--input", help="Name of the input image file")
+    parser.add_argument(
+        "--scale",
+        type=float,
+        help="Scaling factor for the output image",
+    )
+    parser.add_argument(
+        "--brightness",
+        type=int,
+        help="Background brightness of the output image",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="./assets/output",
+        help="Directory to store the generated image",
+    )
+    return parser.parse_args()
 
-__main()
+
+def main():
+    args = parse_args()
+
+    image_name = args.input
+    if image_name is None:
+        image_name = list_files_from_assets()
+        print(image_name)
+        print_divider()
+
+    factor = args.scale
+    if factor is None:
+        print(
+            "Factor : higher factor will lead to larger image size and greater render time"
+        )
+        factor = float(input("Factor input [0-1] - "))
+        print_divider()
+
+    bg_brightness = args.brightness
+    if bg_brightness is None:
+        print("BG color will be black if not modified")
+        choice = input("If it is required to change the output [y/N] - ")
+        print()
+        if choice.capitalize() == "Y":
+            bg_brightness = int(
+                input("Enter brightness factor [range-range] - ")
+            )
+        else:
+            bg_brightness = 30
+
+    convert_image(image_name, factor, bg_brightness, args.output_dir)
+
+
+if __name__ == "__main__":
+    main()
