@@ -10,6 +10,11 @@ from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
 from computeUnicode import generate_char_array
 
+try:
+    from tqdm import tqdm
+except ModuleNotFoundError:  # pragma: no cover - fallback when tqdm is missing
+    tqdm = None
+
 # Default character array – can be replaced by a dynamically generated one
 char_array = [
     ' ', '`', '¨', '·', '¸', '.', '-', "'", ',', '¹', ':', '_', '¯', '~',
@@ -229,10 +234,14 @@ def convert_image(
             draw = ImageDraw.Draw(output_image)
 
         ascii_lines = []
+        progress = loader(
+            total=height * width,
+            desc=f"Frame {frame_index + 1}/{len(frames)}" if len(frames) > 1 else "Pixels",
+        )
         for i in range(height):
             line = []
             for j in range(width):
-                loader(((i * width) + j), (height * width))
+                progress.update(1)
                 _r, _g, _b = pix[j, i]
                 _h = int(_r / 3 + _g / 3 + _b / 3)
                 pix[j, i] = (_h, _h, _h)
@@ -257,6 +266,7 @@ def convert_image(
                         line.append(f"\x1b[38;2;{_r};{_g};{_b}m{ch}")
             if output_format in ("text", "html", "ansi"):
                 ascii_lines.append(line)
+        progress.close()
 
         if output_format != "ansi":
             os.makedirs(output_dir, exist_ok=True)
@@ -331,6 +341,11 @@ def convert_video(
     frames_for_gif = []
     frame_index = 0
 
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    if total_frames <= 0:
+        total_frames = None
+    progress = loader(total=total_frames, desc="Frames")
+
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -355,8 +370,10 @@ def convert_video(
             )
             frames_for_gif.append(imageio.imread(out_path))
         frame_index += 1
+        progress.update(1)
 
     cap.release()
+    progress.close()
 
     if assemble and frames_for_gif:
         gif_path = os.path.join(output_dir, f"{base}.gif")
@@ -365,8 +382,34 @@ def convert_video(
 def print_divider():
     print("\n_________________________________________________")
 
-def loader(count, total):
-    sys.stdout.write(f"\rprocessing - {str((count / total) * 100)}\t%")
+
+def loader(total=None, **kwargs):
+    """Return a progress bar object.
+
+    Uses :mod:`tqdm` when available, otherwise falls back to printing the
+    percentage to stdout similar to the previous ``loader`` implementation.
+    """
+
+    if tqdm is None:
+        class _DummyLoader:
+            def __init__(self, total):
+                self.total = total or 0
+                self.count = 0
+
+            def update(self, n=1):
+                if not self.total:
+                    return
+                self.count += n
+                percent = (self.count / self.total) * 100
+                sys.stdout.write(f"\rprocessing - {percent}\t%")
+
+            def close(self):
+                if self.total:
+                    sys.stdout.write("\n")
+
+        return _DummyLoader(total)
+
+    return tqdm(total=total, **kwargs)
 
 
 def parse_args(args=None):
@@ -464,10 +507,13 @@ def main():
             font_path=args.font,
         )
     elif args.batch:
-        for name in os.listdir(args.batch):
-            full_path = os.path.join(args.batch, name)
-            if not os.path.isfile(full_path):
-                continue
+        names = [
+            os.path.join(args.batch, n)
+            for n in os.listdir(args.batch)
+            if os.path.isfile(os.path.join(args.batch, n))
+        ]
+        progress = loader(total=len(names), desc="Images")
+        for full_path in names:
             convert_image(
                 full_path,
                 factor,
@@ -477,6 +523,8 @@ def main():
                 mono=args.mono,
                 font_path=args.font,
             )
+            progress.update(1)
+        progress.close()
     else:
         image_name = args.input
         if image_name is None:
