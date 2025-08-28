@@ -1,4 +1,5 @@
 import argparse
+import configparser
 import html
 import os
 import sys
@@ -353,13 +354,11 @@ def parse_args(args=None):
     )
     parser.add_argument(
         "--output-dir",
-        default="./assets/output",
         help="Directory to store the generated image",
     )
     parser.add_argument(
         "--format",
         choices=["image", "text", "html", "ansi"],
-        default="image",
         help="Output format",
     )
     parser.add_argument(
@@ -377,6 +376,14 @@ def parse_args(args=None):
 
 
 def main():
+    config = configparser.ConfigParser()
+    config.read(Path(__file__).with_name("config.ini"))
+
+    scale_cfg = config.getfloat("scale", "value", fallback=0.2)
+    brightness_cfg = config.getint("brightness", "value", fallback=30)
+    output_dir_cfg = config.get("output_dir", "path", fallback="./assets/output")
+    format_cfg = config.get("format", "type", fallback="image")
+
     args = parse_args()
     load_char_array(dynamic=args.dynamic_set)
 
@@ -390,25 +397,16 @@ def main():
             raise ValueError("Brightness must be between 0 and 255")
         return val
 
-    factor = args.scale
-    if factor is None:
-        print(
-            "Factor : higher factor will lead to larger image size and greater render time",
-        )
-        factor = float(input("Factor input [0-1] - "))
+    factor = args.scale if args.scale is not None else scale_cfg
     factor = _validate_scale(factor)
 
-    bg_brightness = args.brightness
-    if bg_brightness is None:
-        print("BG color will be black if not modified")
-        choice = input("If it is required to change the output [y/N] - ")
-        if choice.capitalize() == "Y":
-            bg_brightness = int(input("Enter brightness factor [0-255] - "))
-        else:
-            bg_brightness = 30
+    bg_brightness = (
+        args.brightness if args.brightness is not None else brightness_cfg
+    )
     bg_brightness = _validate_brightness(bg_brightness)
 
-    output_format = args.format
+    output_dir = args.output_dir if args.output_dir is not None else output_dir_cfg
+    output_format = args.format if args.format is not None else format_cfg
 
     if args.video and args.webcam:
         print("Choose either --video or --webcam, not both")
@@ -420,7 +418,7 @@ def main():
             source,
             scale_factor=factor,
             bg_brightness=bg_brightness,
-            output_dir=args.output_dir,
+            output_dir=output_dir,
             output_format=output_format,
         )
     elif args.batch:
@@ -428,7 +426,7 @@ def main():
             full_path = os.path.join(args.batch, name)
             if not os.path.isfile(full_path):
                 continue
-            convert_image(full_path, factor, bg_brightness, args.output_dir, output_format)
+            convert_image(full_path, factor, bg_brightness, output_dir, output_format)
     else:
         image_name = args.input
         if image_name is None:
@@ -436,7 +434,7 @@ def main():
         elif not os.path.isfile(os.path.join("./assets/input", image_name)):
             print(f"Input file '{image_name}' not found")
             return
-        convert_image(image_name, factor, bg_brightness, args.output_dir, output_format)
+        convert_image(image_name, factor, bg_brightness, output_dir, output_format)
 
 
 if __name__ == "__main__":

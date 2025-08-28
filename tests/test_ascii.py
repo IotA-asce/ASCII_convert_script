@@ -18,7 +18,7 @@ def test_parse_args_defaults():
     assert args.input is None
     assert args.scale is None
     assert args.brightness is None
-    assert args.output_dir == "./assets/output"
+    assert args.output_dir is None
     assert args.video is None
     assert args.webcam is False
 
