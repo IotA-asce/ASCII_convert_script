@@ -8,8 +8,10 @@ used to map grayscale values to characters in the ASCII art converter.
 
 from __future__ import annotations
 
-import math
+import argparse
+import json
 import os
+from pathlib import Path
 from typing import Iterable, List
 
 from PIL import Image, ImageDraw, ImageFont
@@ -63,20 +65,68 @@ def _ink_percentage(ch: str, font: ImageFont.FreeTypeFont) -> float:
     return white / float(width * height)
 
 
-def generate_char_array(font_path: str | None = None) -> List[str]:
+CACHE_FILE = Path(__file__).with_name("char_cache.json")
+
+
+def _load_cache() -> dict[str, List[str]]:
+    if CACHE_FILE.exists():
+        with CACHE_FILE.open("r", encoding="utf8") as fh:
+            try:
+                return json.load(fh)
+            except json.JSONDecodeError:
+                return {}
+    return {}
+
+
+def _write_cache(cache: dict[str, List[str]]) -> None:
+    with CACHE_FILE.open("w", encoding="utf8") as fh:
+        json.dump(cache, fh, indent=2)
+
+
+def generate_char_array(
+    font_path: str | None = None, *, refresh_cache: bool = False
+) -> List[str]:
     """Return characters sorted by how much of the glyph is filled.
 
     ``font_path`` may be supplied to point to a TTF font. When ``None`` the
-    function attempts to locate a system monospace font.
+    function attempts to locate a system monospace font. Results are cached in
+    ``char_cache.json`` keyed by font path.
     """
     font_path = font_path or _default_font_path()
+    cache_key = font_path or "default"
+    cache = {} if refresh_cache else _load_cache()
+    if not refresh_cache and cache_key in cache:
+        return cache[cache_key]
+
     if font_path:
         font = ImageFont.truetype(font_path, 250)
     else:
         font = ImageFont.load_default()
     percentages = [_ink_percentage(ch, font) for ch in BASE_CHARS]
-    return [ch for _, ch in sorted(zip(percentages, BASE_CHARS))]
+    result = [ch for _, ch in sorted(zip(percentages, BASE_CHARS))]
+
+    cache[cache_key] = result
+    _write_cache(cache)
+    return result
+
+
+def parse_args(args: Iterable[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate brightness-ranked character arrays"
+    )
+    parser.add_argument("--font-path", help="Optional path to a TTF font")
+    parser.add_argument(
+        "--refresh-cache",
+        action="store_true",
+        help="Recompute the character array even if cached",
+    )
+    return parser.parse_args(list(args) if args is not None else None)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual usage
-    print(generate_char_array())
+    _args = parse_args()
+    print(
+        generate_char_array(
+            _args.font_path, refresh_cache=_args.refresh_cache
+        )
+    )
