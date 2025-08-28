@@ -52,10 +52,20 @@ LOADER_STATE = False
 
 
 def load_char_array(dynamic=False, font_path=None):
-    """Load the character array either statically or by computing it."""
+    """Load the character array either statically or by computing it.
+
+    If ``dynamic`` is ``True`` and ``font_path`` points to a valid TTF file,
+    that font is used to generate the array. If the font cannot be loaded the
+    default character set is used instead.
+    """
+
     global char_array
     if dynamic:
-        char_array = generate_char_array(font_path)
+        try:
+            char_array = generate_char_array(font_path)
+        except OSError:
+            print(f"Could not load font '{font_path}', using default set")
+            char_array = generate_char_array(None)
     _recompute_interval()
 
 
@@ -124,6 +134,7 @@ def convert_image(
     output_format="image",
     base_name=None,
     mono=False,
+    font_path=None,
 ):
     """
     Converts an image file to an ASCII art representation, and saves the output
@@ -141,6 +152,7 @@ def convert_image(
         output_dir (str):   Directory where the resulting image will be saved.
                             Defaults to ``./assets/output``.
         mono (bool): Render characters in grayscale instead of colour.
+        font_path (str, optional): Path to a TTF font used for rendering.
 
     Returns:
         None. The output image is saved to a file.
@@ -173,17 +185,23 @@ def convert_image(
             base_name = Path(input_name).stem
 
     # Try to load a monospaced font from common locations. Fallback to the
-    # default Pillow font if none of the paths exist.
-    def _load_font():
+    # default Pillow font if none of the paths exist. ``font_path`` may point
+    # to a custom TTF font to use if it can be loaded.
+    def _load_font(user_font):
         windows_font = r"C:\\Windows\\Fonts\\lucon.ttf"
         linux_font = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
+        if user_font:
+            try:
+                return ImageFont.truetype(user_font, ONE_CHAR_HEIGHT)
+            except OSError:
+                print(f"Could not load font '{user_font}', falling back to defaults")
         if os.path.exists(windows_font):
             return ImageFont.truetype(windows_font, ONE_CHAR_HEIGHT)
         if os.path.exists(linux_font):
             return ImageFont.truetype(linux_font, ONE_CHAR_HEIGHT)
         return ImageFont.load_default()
 
-    fnt = _load_font()
+    fnt = _load_font(font_path)
 
     ascii_grid = []
     frames = [_im]
@@ -285,6 +303,7 @@ def convert_video(
     output_format="image",
     assemble=False,
     mono=False,
+    font_path=None,
 ):
     """Convert a video or webcam stream to ASCII using ``convert_image`` for each frame.
 
@@ -297,6 +316,7 @@ def convert_video(
         assemble: If ``True`` and ``output_format`` is ``image``, frames are
             assembled into an animated GIF using ``imageio``.
         mono: Render frames in grayscale instead of colour.
+        font_path: Optional path to a TTF font used for rendering.
     """
 
     import cv2
@@ -326,6 +346,7 @@ def convert_video(
             output_format=output_format,
             base_name=frame_name,
             mono=mono,
+            font_path=font_path,
         )
         if assemble and output_format == "image":
             out_path = os.path.join(
@@ -376,6 +397,10 @@ def parse_args(args=None):
         action="store_true",
         help="Generate character set dynamically using computeUnicode",
     )
+    parser.add_argument(
+        "--font",
+        help="Path to a TTF font to use for rendering",
+    )
     parser.add_argument("--video", help="Path to a video file to convert")
     parser.add_argument(
         "--webcam",
@@ -400,7 +425,7 @@ def main():
     format_cfg = config.get("format", "type", fallback="image")
 
     args = parse_args()
-    load_char_array(dynamic=args.dynamic_set)
+    load_char_array(dynamic=args.dynamic_set, font_path=args.font)
 
     def _validate_scale(val: float) -> float:
         if not 0 < val <= 1:
@@ -436,13 +461,22 @@ def main():
             output_dir=output_dir,
             output_format=output_format,
             mono=args.mono,
+            font_path=args.font,
         )
     elif args.batch:
         for name in os.listdir(args.batch):
             full_path = os.path.join(args.batch, name)
             if not os.path.isfile(full_path):
                 continue
-            convert_image(full_path, factor, bg_brightness, output_dir, output_format, mono=args.mono)
+            convert_image(
+                full_path,
+                factor,
+                bg_brightness,
+                output_dir,
+                output_format,
+                mono=args.mono,
+                font_path=args.font,
+            )
     else:
         image_name = args.input
         if image_name is None:
@@ -450,7 +484,15 @@ def main():
         elif not os.path.isfile(os.path.join("./assets/input", image_name)):
             print(f"Input file '{image_name}' not found")
             return
-        convert_image(image_name, factor, bg_brightness, output_dir, output_format, mono=args.mono)
+        convert_image(
+            image_name,
+            factor,
+            bg_brightness,
+            output_dir,
+            output_format,
+            mono=args.mono,
+            font_path=args.font,
+        )
 
 
 if __name__ == "__main__":

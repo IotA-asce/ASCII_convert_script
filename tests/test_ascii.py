@@ -22,6 +22,7 @@ def test_parse_args_defaults():
     assert args.video is None
     assert args.webcam is False
     assert args.mono is False
+    assert args.font is None
 
 
 def test_parse_args_ansi_format():
@@ -44,6 +45,13 @@ def test_parse_args_webcam_flag():
 def test_parse_args_mono_flag():
     args = ascii_mod.parse_args(["--mono"])
     assert args.mono is True
+
+
+def test_parse_args_font_flag(tmp_path):
+    font_path = tmp_path / "fake.ttf"
+    font_path.touch()
+    args = ascii_mod.parse_args(["--font", str(font_path)])
+    assert args.font == str(font_path)
 
 
 def test_convert_image_text_output(tmp_path):
