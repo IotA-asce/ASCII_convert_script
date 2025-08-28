@@ -1,6 +1,8 @@
+import argparse
 import os
 import sys
 import math
+from html import escape
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -95,29 +97,28 @@ def list_files_from_assets():
     return list_of_images[index - 1]
 
 
-def convert_image(input_name, scale_factor=0.2, bg_brightness=30):
+def convert_image(input_name, scale_factor=0.2, bg_brightness=30, output_format="image"):
     """
-    Converts an image file to an ASCII art representation, and saves the output
-    image to the "./assets/output/" directory with a filename that includes the 
-    chosen parameters and the input filename.
+    Converts an image file to an ASCII art representation. Depending on
+    ``output_format`` the result can be an image, plain text or a HTML file.
 
     Args:
-        input_name (str):   The name of the image file to be converted, including the 
-                            file extension.
-        scale_factor (float):   The scaling factor for the output image. Default is 0.2,
-                                which means the output image will be 20% of the size of the
-                                input image times the width and height of one character
-        bg_brightness (int):    The brightness level of the output image background. Default is 
-                                30, which is close to medium gray
+        input_name (str):
+            The name of the image file to be converted, including the file
+            extension.
+        scale_factor (float):
+            The scaling factor for the output image. Default is 0.2, which
+            means the output image will be 20% of the size of the input image
+            times the width and height of one character.
+        bg_brightness (int):
+            The brightness level of the output image background. Default is
+            30, which is close to medium gray. Only used when
+            ``output_format`` is ``"image"``.
+        output_format (str):
+            Output format: ``"image"`` (default), ``"text"`` or ``"html"``.
 
     Returns:
-        None. The output image is saved to a file
-
-    Example:
-        If the "./assets/input/" directory contains an image file called "image1.jpg", calling
-        `convert_image("iamge1.jpg", 0.1, 50)` will create an ASCII art representation of the image
-        with a scale factor of 0.1 and a background brightness level of 50, and save the output image to
-        "./assets/output/O_h:50_f_0.1_image1.jpg".
+        None. The output file is written to ``./assets/output/``.
     """
 
     _im = Image.open("./assets/input/" + input_name)
@@ -146,26 +147,63 @@ def convert_image(input_name, scale_factor=0.2, bg_brightness=30):
     width, height = _im.size
     pix = _im.load()
 
-    output_image = Image.new(
-        'RGB', 
-        (ONE_CHAR_WIDTH * width, ONE_CHAR_HEIGHT * height),
-        color=(bg_brightness, bg_brightness, bg_brightness)
-    )  # (0,0,0) for polychromatic images
-
-    _d = ImageDraw.Draw(output_image)
-
-    LOADER_STATE = True
-    for i in range(height):
-        for j in range(width):
-            loader(((i * width) + j), (height * width))
-            _r, _g, _b = pix[j, i]
-            _h = int(_r / 3 + _g / 3 + _b / 3)
-            pix[j, i] = (_h, _h, _h)
-            _d.text((j * ONE_CHAR_WIDTH, i * ONE_CHAR_HEIGHT),
-                   get_char(_h), font=fnt, fill=(_r, _g, _b))
+    os.makedirs("./assets/output", exist_ok=True)
 
     output_name = f"./assets/output/O_h_{str(bg_brightness)}_f_{str(scale_factor)}_{input_name}"
-    output_image.save(output_name)
+
+    if output_format == "image":
+        output_image = Image.new(
+            'RGB',
+            (ONE_CHAR_WIDTH * width, ONE_CHAR_HEIGHT * height),
+            color=(bg_brightness, bg_brightness, bg_brightness)
+        )  # (0,0,0) for polychromatic images
+
+        _d = ImageDraw.Draw(output_image)
+
+        LOADER_STATE = True
+        for i in range(height):
+            for j in range(width):
+                loader(((i * width) + j), (height * width))
+                _r, _g, _b = pix[j, i]
+                _h = int(_r / 3 + _g / 3 + _b / 3)
+                pix[j, i] = (_h, _h, _h)
+                _d.text((j * ONE_CHAR_WIDTH, i * ONE_CHAR_HEIGHT),
+                       get_char(_h), font=fnt, fill=(_r, _g, _b))
+
+        output_image.save(output_name)
+    else:
+        ascii_rows = []
+        LOADER_STATE = True
+        for i in range(height):
+            row = []
+            for j in range(width):
+                loader(((i * width) + j), (height * width))
+                _r, _g, _b = pix[j, i]
+                _h = int(_r / 3 + _g / 3 + _b / 3)
+                row.append((get_char(_h), _r, _g, _b))
+            ascii_rows.append(row)
+
+        if output_format == "text":
+            with open(output_name + ".txt", "w", encoding="utf-8") as f:
+                for row in ascii_rows:
+                    f.write("".join(ch for ch, _, _, _ in row) + "\n")
+        elif output_format == "html":
+            html_lines = []
+            for row in ascii_rows:
+                html_line = "".join(
+                    f'<span style="color:rgb({r},{g},{b})">{escape(ch)}</span>'
+                    for ch, r, g, b in row
+                )
+                html_lines.append(html_line)
+            html_content = (
+                "<!DOCTYPE html><html><body><pre style=\"font-family:monospace;\">"
+                + "\n".join(html_lines)
+                + "</pre></body></html>"
+            )
+            with open(output_name + ".html", "w", encoding="utf-8") as f:
+                f.write(html_content)
+        else:
+            raise ValueError("Invalid output format: " + output_format)
 
 def print_divider():
     print("\n_________________________________________________")
@@ -174,6 +212,15 @@ def loader(count, total):
     sys.stdout.write(f"\rprocessing - {str((count / total) * 100)}\t%")
 
 def __main():
+    parser = argparse.ArgumentParser(description="Convert images to ASCII art")
+    parser.add_argument(
+        "--format",
+        choices=["image", "text", "html"],
+        default="image",
+        help="Output format",
+    )
+    args = parser.parse_args()
+
     image_name = list_files_from_assets()
 
     print(image_name)
@@ -186,8 +233,8 @@ def __main():
     print()
     if choice.capitalize() == "Y":
         bg_brightness = int(input("Enter brightness factor [range-range] - "))
-        convert_image(image_name, factor, bg_brightness)
+        convert_image(image_name, factor, bg_brightness, args.format)
     else:
-        convert_image(image_name, factor)
+        convert_image(image_name, factor, output_format=args.format)
 
 __main()
