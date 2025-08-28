@@ -219,35 +219,46 @@ def convert_image(
                     line.append(ch)
                 elif output_format == "html":
                     line.append((ch, (_r, _g, _b)))
-            if output_format in ("text", "html"):
+                elif output_format == "ansi":
+                    line.append(f"\x1b[38;2;{_r};{_g};{_b}m{ch}")
+            if output_format in ("text", "html", "ansi"):
                 ascii_lines.append(line)
 
-        os.makedirs(output_dir, exist_ok=True)
-        base_name = f"O_h_{bg_brightness}_f_{scale_factor}_{Path(input_name).stem}"
-        if len(frames) > 1:
-            base_name += f"_{frame_index}"
+        if output_format != "ansi":
+            os.makedirs(output_dir, exist_ok=True)
+            base_name = f"O_h_{bg_brightness}_f_{scale_factor}_{Path(input_name).stem}"
+            if len(frames) > 1:
+                base_name += f"_{frame_index}"
 
-        if output_format == "image":
-            output_image.save(os.path.join(output_dir, base_name + ".png"))
-        elif output_format == "text":
-            lines = ["".join(l) for l in ascii_lines]
-            with open(os.path.join(output_dir, base_name + ".txt"), "w", encoding="utf-8") as fh:
-                fh.write("\n".join(lines))
-        elif output_format == "html":
-            html_lines = []
-            for line in ascii_lines:
-                html_line = ''.join(
-                    f'<span style="color:rgb({r},{g},{b})">{html.escape(ch)}</span>'
-                    for ch, (r, g, b) in line
+            if output_format == "image":
+                output_image.save(os.path.join(output_dir, base_name + ".png"))
+            elif output_format == "text":
+                lines = ["".join(l) for l in ascii_lines]
+                with open(
+                    os.path.join(output_dir, base_name + ".txt"), "w", encoding="utf-8"
+                ) as fh:
+                    fh.write("\n".join(lines))
+            elif output_format == "html":
+                html_lines = []
+                for line in ascii_lines:
+                    html_line = ''.join(
+                        f'<span style="color:rgb({r},{g},{b})">{html.escape(ch)}</span>'
+                        for ch, (r, g, b) in line
+                    )
+                    html_lines.append(html_line)
+                html_content = "<br>\n".join(html_lines)
+                page = (
+                    f"<html><body style='background-color:rgb({bg_brightness},{bg_brightness},{bg_brightness});'>"
+                    f"<pre style='font-family:monospace;'>{html_content}</pre></body></html>"
                 )
-                html_lines.append(html_line)
-            html_content = "<br>\n".join(html_lines)
-            page = (
-                f"<html><body style='background-color:rgb({bg_brightness},{bg_brightness},{bg_brightness});'>"
-                f"<pre style='font-family:monospace;'>{html_content}</pre></body></html>"
-            )
-            with open(os.path.join(output_dir, base_name + ".html"), "w", encoding="utf-8") as fh:
-                fh.write(page)
+                with open(
+                    os.path.join(output_dir, base_name + ".html"), "w", encoding="utf-8"
+                ) as fh:
+                    fh.write(page)
+        else:
+            sys.stdout.write("\n")
+            for line in ascii_lines:
+                sys.stdout.write("".join(line) + "\x1b[0m\n")
 
 def print_divider():
     print("\n_________________________________________________")
@@ -277,7 +288,7 @@ def parse_args(args=None):
     )
     parser.add_argument(
         "--format",
-        choices=["image", "text", "html"],
+        choices=["image", "text", "html", "ansi"],
         default="image",
         help="Output format",
     )
