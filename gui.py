@@ -1,6 +1,6 @@
-import os
-import tempfile
-from pathlib import Path
+import io
+import contextlib
+import re
 import tkinter as tk
 from tkinter import filedialog, scrolledtext
 
@@ -16,7 +16,7 @@ class App(tk.Tk):
         self.geometry("800x600")
 
         self.file_path = None
-        self.temp_dir = tempfile.mkdtemp()
+        self._update_job = None
 
         controls = tk.Frame(self)
         controls.pack(fill="x")
@@ -25,29 +25,33 @@ class App(tk.Tk):
 
         tk.Label(controls, text="Scale").pack(side="left", padx=(10, 0))
         self.scale_var = tk.DoubleVar(value=0.2)
-        tk.Scale(
+        self.scale = tk.Scale(
             controls,
             from_=0.1,
             to=1.0,
             orient="horizontal",
             resolution=0.05,
             variable=self.scale_var,
-            command=lambda _evt: self.update_preview(),
-        ).pack(side="left")
+        )
+        self.scale.pack(side="left")
+        self.scale.bind("<Motion>", self.schedule_preview)
+        self.scale.bind("<ButtonRelease>", self.schedule_preview)
 
         tk.Label(controls, text="Brightness").pack(side="left", padx=(10, 0))
         self.brightness_var = tk.IntVar(value=30)
-        tk.Scale(
+        self.brightness = tk.Scale(
             controls,
             from_=0,
             to=255,
             orient="horizontal",
             variable=self.brightness_var,
-            command=lambda _evt: self.update_preview(),
-        ).pack(side="left")
+        )
+        self.brightness.pack(side="left")
+        self.brightness.bind("<Motion>", self.schedule_preview)
+        self.brightness.bind("<ButtonRelease>", self.schedule_preview)
 
-        self.preview = scrolledtext.ScrolledText(self, wrap="none")
-        self.preview.pack(expand=True, fill="both")
+        self.preview_label = scrolledtext.ScrolledText(self, wrap="none")
+        self.preview_label.pack(expand=True, fill="both")
 
     def select_file(self) -> None:
         """Prompt for an input image and refresh the preview."""
@@ -56,29 +60,36 @@ class App(tk.Tk):
             self.file_path = path
             self.update_preview()
 
+    def schedule_preview(self, _event=None) -> None:
+        """Debounce preview updates when sliders are moved."""
+        if self._update_job is not None:
+            self.after_cancel(self._update_job)
+        self._update_job = self.after(200, self.update_preview)
+
     def update_preview(self) -> None:
         """Run conversion and display ASCII art in the preview box."""
         if not self.file_path:
             return
+        if self._update_job is not None:
+            self.after_cancel(self._update_job)
+            self._update_job = None
         scale = self.scale_var.get()
         brightness = self.brightness_var.get()
-        base = Path(self.file_path).stem
-        convert_image(
-            self.file_path,
-            scale_factor=scale,
-            bg_brightness=brightness,
-            output_dir=self.temp_dir,
-            output_format="text",
-            base_name=base,
-        )
-        out_file = os.path.join(self.temp_dir, f"O_h_{brightness}_f_{scale}_{base}.txt")
-        try:
-            with open(out_file, "r", encoding="utf-8") as fh:
-                content = fh.read()
-        except FileNotFoundError:
-            return
-        self.preview.delete("1.0", tk.END)
-        self.preview.insert(tk.END, content)
+        buffer = io.BytesIO()
+        with contextlib.redirect_stdout(
+            io.TextIOWrapper(buffer, encoding="utf-8", write_through=True)
+        ):
+            convert_image(
+                self.file_path,
+                scale_factor=scale,
+                bg_brightness=brightness,
+                output_format="ansi",
+                mono=True,
+            )
+        content = buffer.getvalue().decode("utf-8")
+        content = re.sub(r"\x1b\[[0-9;]*m", "", content).lstrip("\n")
+        self.preview_label.delete("1.0", tk.END)
+        self.preview_label.insert(tk.END, content)
 
 
 def main() -> None:
