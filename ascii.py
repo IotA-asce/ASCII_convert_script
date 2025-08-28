@@ -1,35 +1,55 @@
 import argparse
+import html
 import os
 import sys
 import math
+from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
+from computeUnicode import generate_char_array
+
+# Common image extensions supported by the converter and GUI
+SUPPORTED_IMAGE_EXTS = (
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".bmp",
+    ".gif",
+    ".tiff",
+)
+
+# Default character array – can be replaced by a dynamically generated one
 char_array = [
-                ' ', '`', '¨', '·', '¸', '.', '-', "'", ',', '¹', ':', '_', '¯', '~', 
-                '¬', '¦', ';', '¡', '!', '÷', '*', '*', 'ı', '|', '+', '<', '>', '/', 
-                '=', '»', '«', 'ì', 'í', 'ï', 'i', '^', 'º', '_r', 'L', 'ª', '®', 'ī',
-                'ĩ', 'î', 'ĭ', 'l', '¿', 'J', '×', 'v', '?', 'c', 'į', ')', 'Ĺ', 'Ŀ', 
-                '(', 'Y', 'T', 'Ļ', 'Ľ', 'ĺ', '7', '¤', 't', 'ľ', 'ŀ', 'Ł', '}', '{', 
-                'F', 'ċ', 'ļ', 's', 'ĸ', 'Ý', '[', 'x', 'ć', 'z', 'ç', '1', 'I', ']',
-                'ł', 'j', 'Ĵ', 'C', 'y', 'V', '£', '5', '2', 'f', '3', 'ĉ', 'č', 'n', 
-                'Ì', 'Í', 'İ', '¢', 'ĵ', 'U', 'X', 'Ć', 'Z', 'Ċ', 'S', 'u', 'Ï', 'Þ', 
-                'P', 'Į', 'Ç', 'K', 'A', 'o', 'ÿ', 'ý', 'a', 'e', '4', 'Ĭ', 'E', 'Î', 
-                'Č', 'Ĉ', 'Ī', 'Ĩ', 'Ú', 'Ù', 'ń', 'ņ', 'ŉ', 'k', 'Ü', 'Á', 'À', 'ù', 
-                'ú', 'ü', '¥', 'ė', 'w', 'H', 'È', 'É', 'Ä', 'Å', 'ö', 'Ė', 'ò', 'G', 
-                'ó', 'Ķ', 'ä', 'Û', 'á', 'à', 'Ą', 'ë', 'é', 'è', '_h', 'ą', 'ę', 'Ë', 
-                'å', 'ñ', 'ň', 'Ę', 'O', 'Ă', '$', 'Â', 'û', 'Ĕ', 'Ā', 'Ě', 'Ê', 'Ã', 
-                'Æ', 'R', 'ā', 'D', 'ē', 'ķ', 'õ', '½', 'Ē', 'p', 'ã', 'ô', 'ă', 'Ġ', 
-                'â', 'ĕ', '9', '6', 'ê', 'ě', 'q', '¼', 'Ĳ', 'm', 'N', '%', '0', 'Ģ', 
-                'ħ', '_b', 'Ò', 'Ó', '#', 'ø', '_d', 'Ö', 'Ĥ', 'Ğ', '§', 'Ĝ', 'W', 'M', 
-                'B', 'æ', 'Ð', 'Đ', 'Q', 'Ô', '©', 'Ń', 'Ħ', '8', 'ĥ', 'Õ', '_g', 'Ď', 
-                'Ņ', 'ĳ', 'đ', 'ß', 'þ', 'Ň', 'ð', '@', 'Ŋ', 'Ñ', '¾', 'ġ', 'Ø', 'ģ', 
-                'ď', 'ğ', '&', 'ĝ'
-            ]
+    ' ', '`', '¨', '·', '¸', '.', '-', "'", ',', '¹', ':', '_', '¯', '~',
+    '¬', '¦', ';', '¡', '!', '÷', '*', '*', 'ı', '|', '+', '<', '>', '/',
+    '=', '»', '«', 'ì', 'í', 'ï', 'i', '^', 'º', '_r', 'L', 'ª', '®', 'ī',
+    'ĩ', 'î', 'ĭ', 'l', '¿', 'J', '×', 'v', '?', 'c', 'į', ')', 'Ĺ', 'Ŀ',
+    '(', 'Y', 'T', 'Ļ', 'Ľ', 'ĺ', '7', '¤', 't', 'ľ', 'ŀ', 'Ł', '}', '{',
+    'F', 'ċ', 'ļ', 's', 'ĸ', 'Ý', '[', 'x', 'ć', 'z', 'ç', '1', 'I', ']',
+    'ł', 'j', 'Ĵ', 'C', 'y', 'V', '£', '5', '2', 'f', '3', 'ĉ', 'č', 'n',
+    'Ì', 'Í', 'İ', '¢', 'ĵ', 'U', 'X', 'Ć', 'Z', 'Ċ', 'S', 'u', 'Ï', 'Þ',
+    'P', 'Į', 'Ç', 'K', 'A', 'o', 'ÿ', 'ý', 'a', 'e', '4', 'Ĭ', 'E', 'Î',
+    'Č', 'Ĉ', 'Ī', 'Ĩ', 'Ú', 'Ù', 'ń', 'ņ', 'ŉ', 'k', 'Ü', 'Á', 'À', 'ù',
+    'ú', 'ü', '¥', 'ė', 'w', 'H', 'È', 'É', 'Ä', 'Å', 'ö', 'Ė', 'ò', 'G',
+    'ó', 'Ķ', 'ä', 'Û', 'á', 'à', 'Ą', 'ë', 'é', 'è', '_h', 'ą', 'ę', 'Ë',
+    'å', 'ñ', 'ň', 'Ę', 'O', 'Ă', '$', 'Â', 'û', 'Ĕ', 'Ā', 'Ě', 'Ê', 'Ã',
+    'Æ', 'R', 'ā', 'D', 'ē', 'ķ', 'õ', '½', 'Ē', 'p', 'ã', 'ô', 'ă', 'Ġ',
+    'â', 'ĕ', '9', '6', 'ê', 'ě', 'q', '¼', 'Ĳ', 'm', 'N', '%', '0', 'Ģ',
+    'ħ', '_b', 'Ò', 'Ó', '#', 'ø', '_d', 'Ö', 'Ĥ', 'Ğ', '§', 'Ĝ', 'W', 'M',
+    'B', 'æ', 'Ð', 'Đ', 'Q', 'Ô', '©', 'Ń', 'Ħ', '8', 'ĥ', 'Õ', '_g', 'Ď',
+    'Ņ', 'ĳ', 'đ', 'ß', 'þ', 'Ň', 'ð', '@', 'Ŋ', 'Ñ', '¾', 'ġ', 'Ø', 'ģ',
+    'ď', 'ğ', '&', 'ĝ'
+]
 
 
-CHAR_LENGTH = len(char_array)   # The number of characters in the char_array
-INTERVAL = CHAR_LENGTH / 256    
+def _recompute_interval():
+    global CHAR_LENGTH, INTERVAL
+    CHAR_LENGTH = len(char_array)
+    INTERVAL = CHAR_LENGTH / 256
+
+
+_recompute_interval()
 
 ONE_CHAR_WIDTH = 10
 ONE_CHAR_HEIGHT = 18
@@ -38,6 +58,15 @@ OUTPUT_IMAGE_PREFIX = "FrameOut"  # output image file name prefix
 INPUT_FILE_PREFIX = "Frame"  # input file name prefix
 
 LOADER_STATE = False
+
+
+def load_char_array(dynamic=False, font_path=None):
+    """Load the character array either statically or by computing it."""
+    global char_array
+    if dynamic:
+        char_array = generate_char_array(font_path)
+    _recompute_interval()
+
 
 def get_char(input_int):
     """
@@ -83,20 +112,31 @@ def list_files_from_assets():
         The user will be prompted to enter a choice, and if they enter "2", the function
         will return "image2.jpg".
     """
-    list_of_images = os.listdir("./assets/input/")
-    index = 1
+    list_of_images = [
+        f
+        for f in os.listdir("./assets/input/")
+        if f.lower().endswith(SUPPORTED_IMAGE_EXTS)
+    ]
+    if not list_of_images:
+        print("No images found in ./assets/input/")
+        return None
 
     print("Available choice -> \n")
     print_divider()
-    for image in list_of_images:
+    for index, image in enumerate(list_of_images, start=1):
         print(f"{index} - {image}")
-        index += 1
     print_divider()
     index = int(input("Enter the choice : "))
     return list_of_images[index - 1]
 
 
-def convert_image(input_name, scale_factor=0.2, bg_brightness=30, output_dir="./assets/output"):
+def convert_image(
+    input_name,
+    scale_factor=0.2,
+    bg_brightness=30,
+    output_dir="./assets/output",
+    output_format="image",
+):
     """
     Converts an image file to an ASCII art representation, and saves the output
     image to ``output_dir`` with a filename that includes the chosen parameters
@@ -114,7 +154,7 @@ def convert_image(input_name, scale_factor=0.2, bg_brightness=30, output_dir="./
                             Defaults to ``./assets/output``.
 
     Returns:
-        None. The output image is saved to a file.
+        list[str]: Paths to the generated output files.
 
     Example:
         If the "./assets/input/" directory contains an image file called
@@ -124,7 +164,17 @@ def convert_image(input_name, scale_factor=0.2, bg_brightness=30, output_dir="./
         to ``./assets/output/O_h:50_f_0.1_image1.jpg``.
     """
 
-    _im = Image.open(os.path.join("./assets/input", input_name))
+    input_name = os.fspath(input_name)
+    input_path = (
+        input_name
+        if os.path.isabs(input_name) or os.path.exists(input_name)
+        else os.path.join("./assets/input", input_name)
+    )
+    try:
+        _im = Image.open(input_path)
+    except FileNotFoundError:
+        print(f"Input file '{input_name}' not found")
+        return []
 
     # Try to load a monospaced font from common locations. Fallback to the
     # default Pillow font if none of the paths exist.
@@ -139,40 +189,89 @@ def convert_image(input_name, scale_factor=0.2, bg_brightness=30, output_dir="./
 
     fnt = _load_font()
 
-    width, height = _im.size
-    _im = _im.resize(
-        (
-            int(scale_factor * width), 
-            int(scale_factor * height * (ONE_CHAR_WIDTH / ONE_CHAR_HEIGHT))
-        ),
-        Image.NEAREST
-    )
-    width, height = _im.size
-    pix = _im.load()
+    ascii_grid = []
+    frames = [_im]
+    if getattr(_im, "is_animated", False):
+        frames = [frame.copy() for frame in ImageSequence.Iterator(_im)]
 
-    output_image = Image.new(
-        'RGB', 
-        (ONE_CHAR_WIDTH * width, ONE_CHAR_HEIGHT * height),
-        color=(bg_brightness, bg_brightness, bg_brightness)
-    )  # (0,0,0) for polychromatic images
+    output_files = []
+    for frame_index, frame in enumerate(frames):
+        width, height = frame.size
+        frame = frame.resize(
+            (
+                max(1, int(scale_factor * width)),
+                max(1, int(scale_factor * height * (ONE_CHAR_WIDTH / ONE_CHAR_HEIGHT))),
+            ),
+            Image.NEAREST,
+        )
+        width, height = frame.size
+        pix = frame.load()
 
-    _d = ImageDraw.Draw(output_image)
+        if output_format == "image":
+            output_image = Image.new(
+                "RGB",
+                (ONE_CHAR_WIDTH * width, ONE_CHAR_HEIGHT * height),
+                color=(bg_brightness, bg_brightness, bg_brightness),
+            )
+            draw = ImageDraw.Draw(output_image)
 
-    LOADER_STATE = True
-    for i in range(height):
-        for j in range(width):
-            loader(((i * width) + j), (height * width))
-            _r, _g, _b = pix[j, i]
-            _h = int(_r / 3 + _g / 3 + _b / 3)
-            pix[j, i] = (_h, _h, _h)
-            _d.text((j * ONE_CHAR_WIDTH, i * ONE_CHAR_HEIGHT),
-                   get_char(_h), font=fnt, fill=(_r, _g, _b))
+        ascii_lines = []
+        for i in range(height):
+            line = []
+            for j in range(width):
+                loader(((i * width) + j), (height * width))
+                _r, _g, _b = pix[j, i]
+                _h = int(_r / 3 + _g / 3 + _b / 3)
+                pix[j, i] = (_h, _h, _h)
+                ch = get_char(_h)
+                if output_format == "image":
+                    draw.text(
+                        (j * ONE_CHAR_WIDTH, i * ONE_CHAR_HEIGHT),
+                        ch,
+                        font=fnt,
+                        fill=(_r, _g, _b),
+                    )
+                elif output_format == "text":
+                    line.append(ch)
+                elif output_format == "html":
+                    line.append((ch, (_r, _g, _b)))
+            if output_format in ("text", "html"):
+                ascii_lines.append(line)
 
-    os.makedirs(output_dir, exist_ok=True)
-    output_name = os.path.join(
-        output_dir, f"O_h_{str(bg_brightness)}_f_{str(scale_factor)}_{input_name}"
-    )
-    output_image.save(output_name)
+        os.makedirs(output_dir, exist_ok=True)
+        base_name = f"O_h_{bg_brightness}_f_{scale_factor}_{Path(input_name).stem}"
+        if len(frames) > 1:
+            base_name += f"_{frame_index}"
+
+        if output_format == "image":
+            out_path = os.path.join(output_dir, base_name + ".png")
+            output_image.save(out_path)
+            output_files.append(out_path)
+        elif output_format == "text":
+            lines = ["".join(l) for l in ascii_lines]
+            out_path = os.path.join(output_dir, base_name + ".txt")
+            with open(out_path, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(lines))
+            output_files.append(out_path)
+        elif output_format == "html":
+            html_lines = []
+            for line in ascii_lines:
+                html_line = ''.join(
+                    f'<span style="color:rgb({r},{g},{b})">{html.escape(ch)}</span>'
+                    for ch, (r, g, b) in line
+                )
+                html_lines.append(html_line)
+            html_content = "<br>\n".join(html_lines)
+            page = (
+                f"<html><body style='background-color:rgb({bg_brightness},{bg_brightness},{bg_brightness});'>"
+                f"<pre style='font-family:monospace;'>{html_content}</pre></body></html>"
+            )
+            out_path = os.path.join(output_dir, base_name + ".html")
+            with open(out_path, "w", encoding="utf-8") as fh:
+                fh.write(page)
+            output_files.append(out_path)
+
+    return output_files
 
 def print_divider():
     print("\n_________________________________________________")
@@ -181,9 +280,10 @@ def loader(count, total):
     sys.stdout.write(f"\rprocessing - {str((count / total) * 100)}\t%")
 
 
-def parse_args():
+def parse_args(args=None):
     parser = argparse.ArgumentParser(description="Convert images to ASCII art")
     parser.add_argument("--input", help="Name of the input image file")
+    parser.add_argument("--batch", help="Convert all images in the given directory")
     parser.add_argument(
         "--scale",
         type=float,
@@ -199,39 +299,68 @@ def parse_args():
         default="./assets/output",
         help="Directory to store the generated image",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--format",
+        choices=["image", "text", "html"],
+        default="image",
+        help="Output format",
+    )
+    parser.add_argument(
+        "--dynamic-set",
+        action="store_true",
+        help="Generate character set dynamically using computeUnicode",
+    )
+    return parser.parse_args(args)
 
 
 def main():
     args = parse_args()
+    load_char_array(dynamic=args.dynamic_set)
 
-    image_name = args.input
-    if image_name is None:
-        image_name = list_files_from_assets()
-        print(image_name)
-        print_divider()
+    def _validate_scale(val: float) -> float:
+        if not 0 < val <= 1:
+            raise ValueError("Scale factor must be between 0 and 1")
+        return val
+
+    def _validate_brightness(val: int) -> int:
+        if not 0 <= val <= 255:
+            raise ValueError("Brightness must be between 0 and 255")
+        return val
 
     factor = args.scale
     if factor is None:
         print(
-            "Factor : higher factor will lead to larger image size and greater render time"
+            "Factor : higher factor will lead to larger image size and greater render time",
         )
         factor = float(input("Factor input [0-1] - "))
-        print_divider()
+    factor = _validate_scale(factor)
 
     bg_brightness = args.brightness
     if bg_brightness is None:
         print("BG color will be black if not modified")
         choice = input("If it is required to change the output [y/N] - ")
-        print()
         if choice.capitalize() == "Y":
-            bg_brightness = int(
-                input("Enter brightness factor [range-range] - ")
-            )
+            bg_brightness = int(input("Enter brightness factor [0-255] - "))
         else:
             bg_brightness = 30
+    bg_brightness = _validate_brightness(bg_brightness)
 
-    convert_image(image_name, factor, bg_brightness, args.output_dir)
+    output_format = args.format
+
+    if args.batch:
+        for name in os.listdir(args.batch):
+            full_path = os.path.join(args.batch, name)
+            if not os.path.isfile(full_path):
+                continue
+            convert_image(full_path, factor, bg_brightness, args.output_dir, output_format)
+    else:
+        image_name = args.input
+        if image_name is None:
+            image_name = list_files_from_assets()
+        elif not os.path.isfile(os.path.join("./assets/input", image_name)):
+            print(f"Input file '{image_name}' not found")
+            return
+        convert_image(image_name, factor, bg_brightness, args.output_dir, output_format)
 
 
 if __name__ == "__main__":
