@@ -1,8 +1,10 @@
 import os
 from pathlib import Path
+import sys
 
 from PIL import Image
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import ascii as ascii_mod
 
 
@@ -17,11 +19,25 @@ def test_parse_args_defaults():
     assert args.scale is None
     assert args.brightness is None
     assert args.output_dir == "./assets/output"
+    assert args.video is None
+    assert args.webcam is False
 
 
 def test_parse_args_ansi_format():
     args = ascii_mod.parse_args(["--format", "ansi"])
     assert args.format == "ansi"
+
+
+def test_parse_args_video_flag():
+    args = ascii_mod.parse_args(["--video", "movie.mp4"])
+    assert args.video == "movie.mp4"
+    assert args.webcam is False
+
+
+def test_parse_args_webcam_flag():
+    args = ascii_mod.parse_args(["--webcam"])
+    assert args.webcam is True
+    assert args.video is None
 
 
 def test_convert_image_text_output(tmp_path):
@@ -61,3 +77,17 @@ def test_convert_image_ansi_stdout(tmp_path, capsys):
     expected_char = ascii_mod.get_char(255)
     expected_line = f"\x1b[38;2;255;255;255m{expected_char}\x1b[0m"
     assert expected_line in captured
+
+
+def test_convert_image_pil_input(tmp_path):
+    img = Image.new("RGB", (1, 1), color=(255, 255, 255))
+    ascii_mod.convert_image(
+        img,
+        scale_factor=1.0,
+        bg_brightness=0,
+        output_dir=tmp_path,
+        output_format="text",
+        base_name="pil_img",
+    )
+    out_file = tmp_path / "O_h_0_f_1.0_pil_img.txt"
+    assert out_file.exists()

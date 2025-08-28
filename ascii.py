@@ -121,6 +121,7 @@ def convert_image(
     bg_brightness=30,
     output_dir="./assets/output",
     output_format="image",
+    base_name=None,
 ):
     """
     Converts an image file to an ASCII art representation, and saves the output
@@ -149,17 +150,24 @@ def convert_image(
         to ``./assets/output/O_h:50_f_0.1_image1.jpg``.
     """
 
-    input_name = os.fspath(input_name)
-    input_path = (
-        input_name
-        if os.path.isabs(input_name) or os.path.exists(input_name)
-        else os.path.join("./assets/input", input_name)
-    )
-    try:
-        _im = Image.open(input_path)
-    except FileNotFoundError:
-        print(f"Input file '{input_name}' not found")
-        return
+    if isinstance(input_name, Image.Image):
+        _im = input_name
+        if base_name is None:
+            base_name = "frame"
+    else:
+        input_name = os.fspath(input_name)
+        input_path = (
+            input_name
+            if os.path.isabs(input_name) or os.path.exists(input_name)
+            else os.path.join("./assets/input", input_name)
+        )
+        try:
+            _im = Image.open(input_path)
+        except FileNotFoundError:
+            print(f"Input file '{input_name}' not found")
+            return
+        if base_name is None:
+            base_name = Path(input_name).stem
 
     # Try to load a monospaced font from common locations. Fallback to the
     # default Pillow font if none of the paths exist.
@@ -226,16 +234,16 @@ def convert_image(
 
         if output_format != "ansi":
             os.makedirs(output_dir, exist_ok=True)
-            base_name = f"O_h_{bg_brightness}_f_{scale_factor}_{Path(input_name).stem}"
+            file_stem = f"O_h_{bg_brightness}_f_{scale_factor}_{base_name}"
             if len(frames) > 1:
-                base_name += f"_{frame_index}"
+                file_stem += f"_{frame_index}"
 
             if output_format == "image":
-                output_image.save(os.path.join(output_dir, base_name + ".png"))
+                output_image.save(os.path.join(output_dir, file_stem + ".png"))
             elif output_format == "text":
                 lines = ["".join(l) for l in ascii_lines]
                 with open(
-                    os.path.join(output_dir, base_name + ".txt"), "w", encoding="utf-8"
+                    os.path.join(output_dir, file_stem + ".txt"), "w", encoding="utf-8"
                 ) as fh:
                     fh.write("\n".join(lines))
             elif output_format == "html":
@@ -252,13 +260,75 @@ def convert_image(
                     f"<pre style='font-family:monospace;'>{html_content}</pre></body></html>"
                 )
                 with open(
-                    os.path.join(output_dir, base_name + ".html"), "w", encoding="utf-8"
+                    os.path.join(output_dir, file_stem + ".html"), "w", encoding="utf-8"
                 ) as fh:
                     fh.write(page)
         else:
             sys.stdout.write("\n")
             for line in ascii_lines:
                 sys.stdout.write("".join(line) + "\x1b[0m\n")
+
+
+def convert_video(
+    video_path=None,
+    scale_factor=0.2,
+    bg_brightness=30,
+    output_dir="./assets/output",
+    output_format="image",
+    assemble=False,
+):
+    """Convert a video or webcam stream to ASCII using ``convert_image`` for each frame.
+
+    Args:
+        video_path: Path to a video file. If ``None`` the default webcam is used.
+        scale_factor: Scaling factor for each frame.
+        bg_brightness: Background brightness for the output.
+        output_dir: Directory to store generated frames.
+        output_format: Output format passed to ``convert_image``.
+        assemble: If ``True`` and ``output_format`` is ``image``, frames are
+            assembled into an animated GIF using ``imageio``.
+    """
+
+    import cv2
+    import imageio
+
+    cap = cv2.VideoCapture(0 if video_path is None else video_path)
+    if not cap.isOpened():
+        print("Could not open video source")
+        return
+
+    base = "webcam" if video_path is None else Path(video_path).stem
+    frames_for_gif = []
+    frame_index = 0
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(frame_rgb)
+        frame_name = f"{base}_{frame_index:05d}"
+        convert_image(
+            pil_img,
+            scale_factor=scale_factor,
+            bg_brightness=bg_brightness,
+            output_dir=output_dir,
+            output_format=output_format,
+            base_name=frame_name,
+        )
+        if assemble and output_format == "image":
+            out_path = os.path.join(
+                output_dir,
+                f"O_h_{bg_brightness}_f_{scale_factor}_{frame_name}.png",
+            )
+            frames_for_gif.append(imageio.imread(out_path))
+        frame_index += 1
+
+    cap.release()
+
+    if assemble and frames_for_gif:
+        gif_path = os.path.join(output_dir, f"{base}.gif")
+        imageio.mimsave(gif_path, frames_for_gif, fps=24)
 
 def print_divider():
     print("\n_________________________________________________")
@@ -297,6 +367,12 @@ def parse_args(args=None):
         action="store_true",
         help="Generate character set dynamically using computeUnicode",
     )
+    parser.add_argument("--video", help="Path to a video file to convert")
+    parser.add_argument(
+        "--webcam",
+        action="store_true",
+        help="Use webcam for live capture",
+    )
     return parser.parse_args(args)
 
 
@@ -334,7 +410,20 @@ def main():
 
     output_format = args.format
 
-    if args.batch:
+    if args.video and args.webcam:
+        print("Choose either --video or --webcam, not both")
+        return
+
+    if args.video or args.webcam:
+        source = None if args.webcam else args.video
+        convert_video(
+            source,
+            scale_factor=factor,
+            bg_brightness=bg_brightness,
+            output_dir=args.output_dir,
+            output_format=output_format,
+        )
+    elif args.batch:
         for name in os.listdir(args.batch):
             full_path = os.path.join(args.batch, name)
             if not os.path.isfile(full_path):
