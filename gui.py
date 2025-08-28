@@ -1,8 +1,9 @@
 import io
 import contextlib
 import re
+import threading
 import tkinter as tk
-from tkinter import filedialog, scrolledtext
+from tkinter import filedialog, scrolledtext, ttk
 
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
@@ -59,6 +60,10 @@ class AsciiGui(TkinterDnD.Tk):
         self.preview_label = scrolledtext.ScrolledText(self, wrap="none")
         self.preview_label.pack(expand=True, fill="both")
 
+        self.progress = ttk.Progressbar(self, mode="determinate")
+        self.progress.pack(fill="x")
+        self.progress.pack_forget()
+
     def select_file(self) -> None:
         """Prompt for an input image and refresh the preview."""
         path = filedialog.askopenfilename()
@@ -89,18 +94,41 @@ class AsciiGui(TkinterDnD.Tk):
             self._update_job = None
         scale = self.scale_var.get()
         brightness = self.brightness_var.get()
-        buffer = io.BytesIO()
-        with contextlib.redirect_stdout(
-            io.TextIOWrapper(buffer, encoding="utf-8", write_through=True)
-        ):
-            convert_image(
-                self.input_path,
-                scale_factor=scale,
-                bg_brightness=brightness,
-                output_format="ansi",
-                mono=True,
-            )
-        content = buffer.getvalue().decode("utf-8")
+        self.progress["value"] = 0
+        self.progress.pack(fill="x")
+
+        def _progress(done, total):
+            self.after(0, lambda: self._update_progress(done, total))
+
+        def _worker():
+            buffer = io.BytesIO()
+            try:
+                with contextlib.redirect_stdout(
+                    io.TextIOWrapper(buffer, encoding="utf-8", write_through=True)
+                ):
+                    convert_image(
+                        self.input_path,
+                        scale_factor=scale,
+                        bg_brightness=brightness,
+                        output_format="ansi",
+                        mono=True,
+                        progress_callback=_progress,
+                    )
+                content = buffer.getvalue().decode("utf-8")
+            except Exception:
+                content = None
+            self.after(0, lambda: self._finish_preview(content))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _update_progress(self, done: int, total: int) -> None:
+        self.progress["maximum"] = total
+        self.progress["value"] = done
+
+    def _finish_preview(self, content: str | None) -> None:
+        self.progress.pack_forget()
+        if content is None:
+            return
         content = re.sub(r"\x1b\[[0-9;]*m", "", content).lstrip("\n")
         self.preview_label.delete("1.0", tk.END)
         self.preview_label.insert(tk.END, content)
