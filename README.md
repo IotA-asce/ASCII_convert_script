@@ -6,7 +6,7 @@ whose "ink" coverage approximates the pixel brightness.
 ## Installation
 
 ```bash
-pip install pillow
+pip install pillow tkinterdnd2
 ```
 
 ## Command line usage
@@ -35,8 +35,8 @@ Launch the Tkinter interface with:
 python -m gui
 ```
 
-Use the file picker to choose an image, adjust the scale and brightness sliders,
-and the ASCII preview will update automatically.
+Use the file picker or drag and drop an image onto the window, adjust the scale
+and brightness sliders, and the ASCII preview will update automatically.
 
 ## Generating custom character sets
 

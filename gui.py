@@ -4,10 +4,12 @@ import re
 import tkinter as tk
 from tkinter import filedialog, scrolledtext
 
+from tkinterdnd2 import DND_FILES, TkinterDnD
+
 from ascii import convert_image
 
 
-class App(tk.Tk):
+class AsciiGui(TkinterDnD.Tk):
     """Simple Tkinter interface for converting images to ASCII art."""
 
     def __init__(self) -> None:
@@ -15,8 +17,12 @@ class App(tk.Tk):
         self.title("ASCII Converter")
         self.geometry("800x600")
 
-        self.file_path = None
+        self.input_path = None
         self._update_job = None
+
+        # allow dropping files onto the main window
+        self.drop_target_register(DND_FILES)
+        self.dnd_bind("<<Drop>>", self._on_drop)
 
         controls = tk.Frame(self)
         controls.pack(fill="x")
@@ -57,8 +63,16 @@ class App(tk.Tk):
         """Prompt for an input image and refresh the preview."""
         path = filedialog.askopenfilename()
         if path:
-            self.file_path = path
+            self.input_path = path
             self.update_preview()
+
+    def _on_drop(self, event) -> str:
+        """Handle a file being dropped onto the window."""
+        paths = self.tk.splitlist(event.data)
+        if paths:
+            self.input_path = paths[0]
+            self.update_preview()
+        return event.action
 
     def schedule_preview(self, _event=None) -> None:
         """Debounce preview updates when sliders are moved."""
@@ -68,7 +82,7 @@ class App(tk.Tk):
 
     def update_preview(self) -> None:
         """Run conversion and display ASCII art in the preview box."""
-        if not self.file_path:
+        if not self.input_path:
             return
         if self._update_job is not None:
             self.after_cancel(self._update_job)
@@ -80,7 +94,7 @@ class App(tk.Tk):
             io.TextIOWrapper(buffer, encoding="utf-8", write_through=True)
         ):
             convert_image(
-                self.file_path,
+                self.input_path,
                 scale_factor=scale,
                 bg_brightness=brightness,
                 output_format="ansi",
@@ -93,7 +107,7 @@ class App(tk.Tk):
 
 
 def main() -> None:
-    app = App()
+    app = AsciiGui()
     app.mainloop()
 
 
