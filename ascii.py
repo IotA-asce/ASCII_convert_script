@@ -140,6 +140,7 @@ def convert_image(
     base_name=None,
     mono=False,
     font_path=None,
+    progress_callback=None,
 ):
     """
     Converts an image file to an ASCII art representation, and saves the output
@@ -158,6 +159,9 @@ def convert_image(
                             Defaults to ``./assets/output``.
         mono (bool): Render characters in grayscale instead of colour.
         font_path (str, optional): Path to a TTF font used for rendering.
+        progress_callback (callable, optional): Callback invoked as
+            ``progress_callback(current, total)`` to report the number of
+            processed rows.
 
     Returns:
         None. The output image is saved to a file.
@@ -234,14 +238,17 @@ def convert_image(
             draw = ImageDraw.Draw(output_image)
 
         ascii_lines = []
-        progress = loader(
+        progress = None if progress_callback else loader(
             total=height * width,
             desc=f"Frame {frame_index + 1}/{len(frames)}" if len(frames) > 1 else "Pixels",
         )
+        if progress_callback:
+            progress_callback(0, height)
         for i in range(height):
             line = []
             for j in range(width):
-                progress.update(1)
+                if progress:
+                    progress.update(1)
                 _r, _g, _b = pix[j, i]
                 _h = int(_r / 3 + _g / 3 + _b / 3)
                 pix[j, i] = (_h, _h, _h)
@@ -266,7 +273,10 @@ def convert_image(
                         line.append(f"\x1b[38;2;{_r};{_g};{_b}m{ch}")
             if output_format in ("text", "html", "ansi"):
                 ascii_lines.append(line)
-        progress.close()
+            if progress_callback:
+                progress_callback(i + 1, height)
+        if progress:
+            progress.close()
 
         if output_format != "ansi":
             os.makedirs(output_dir, exist_ok=True)

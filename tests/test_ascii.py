@@ -126,3 +126,28 @@ def test_convert_image_pil_input(tmp_path):
     )
     out_file = tmp_path / "O_h_0_f_1.0_pil_img.txt"
     assert out_file.exists()
+
+
+def test_convert_image_progress_callback(tmp_path):
+    img = Image.new("RGB", (2, 2), color=(255, 255, 255))
+    input_dir = Path("assets/input")
+    input_dir.mkdir(parents=True, exist_ok=True)
+    test_name = "test_progress.png"
+    test_path = input_dir / test_name
+    img.save(test_path)
+    calls = []
+
+    def cb(done, total):
+        calls.append((done, total))
+
+    ascii_mod.convert_image(
+        test_path,
+        scale_factor=1.0,
+        bg_brightness=0,
+        output_dir=tmp_path,
+        output_format="text",
+        progress_callback=cb,
+    )
+    assert calls[0][0] == 0
+    assert calls[-1][0] == calls[-1][1]
+    assert calls[-1][1] > 0
