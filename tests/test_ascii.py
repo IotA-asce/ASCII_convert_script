@@ -21,6 +21,7 @@ def test_parse_args_defaults():
     assert args.output_dir is None
     assert args.video is None
     assert args.webcam is False
+    assert args.mono is False
 
 
 def test_parse_args_ansi_format():
@@ -38,6 +39,11 @@ def test_parse_args_webcam_flag():
     args = ascii_mod.parse_args(["--webcam"])
     assert args.webcam is True
     assert args.video is None
+
+
+def test_parse_args_mono_flag():
+    args = ascii_mod.parse_args(["--mono"])
+    assert args.mono is True
 
 
 def test_convert_image_text_output(tmp_path):
@@ -76,6 +82,27 @@ def test_convert_image_ansi_stdout(tmp_path, capsys):
     captured = capsys.readouterr().out
     expected_char = ascii_mod.get_char(255)
     expected_line = f"\x1b[38;2;255;255;255m{expected_char}\x1b[0m"
+    assert expected_line in captured
+
+
+def test_convert_image_mono_ansi_stdout(tmp_path, capsys):
+    img = Image.new("RGB", (1, 1), color=(255, 0, 0))
+    input_dir = Path("assets/input")
+    input_dir.mkdir(parents=True, exist_ok=True)
+    test_name = "test_mono_ansi.png"
+    test_path = input_dir / test_name
+    img.save(test_path)
+    ascii_mod.convert_image(
+        test_path,
+        scale_factor=1.0,
+        bg_brightness=0,
+        output_dir=tmp_path,
+        output_format="ansi",
+        mono=True,
+    )
+    captured = capsys.readouterr().out
+    expected_char = ascii_mod.get_char(85)
+    expected_line = f"\x1b[38;2;85;85;85m{expected_char}\x1b[0m"
     assert expected_line in captured
 
 

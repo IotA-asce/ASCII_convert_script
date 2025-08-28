@@ -123,6 +123,7 @@ def convert_image(
     output_dir="./assets/output",
     output_format="image",
     base_name=None,
+    mono=False,
 ):
     """
     Converts an image file to an ASCII art representation, and saves the output
@@ -139,6 +140,7 @@ def convert_image(
                                 30, which is close to medium gray.
         output_dir (str):   Directory where the resulting image will be saved.
                             Defaults to ``./assets/output``.
+        mono (bool): Render characters in grayscale instead of colour.
 
     Returns:
         None. The output image is saved to a file.
@@ -218,18 +220,23 @@ def convert_image(
                 pix[j, i] = (_h, _h, _h)
                 ch = get_char(_h)
                 if output_format == "image":
+                    color = (_h, _h, _h) if mono else (_r, _g, _b)
                     draw.text(
                         (j * ONE_CHAR_WIDTH, i * ONE_CHAR_HEIGHT),
                         ch,
                         font=fnt,
-                        fill=(_r, _g, _b),
+                        fill=color,
                     )
                 elif output_format == "text":
                     line.append(ch)
                 elif output_format == "html":
-                    line.append((ch, (_r, _g, _b)))
+                    color = (_h, _h, _h) if mono else (_r, _g, _b)
+                    line.append((ch, color))
                 elif output_format == "ansi":
-                    line.append(f"\x1b[38;2;{_r};{_g};{_b}m{ch}")
+                    if mono:
+                        line.append(f"\x1b[38;2;{_h};{_h};{_h}m{ch}")
+                    else:
+                        line.append(f"\x1b[38;2;{_r};{_g};{_b}m{ch}")
             if output_format in ("text", "html", "ansi"):
                 ascii_lines.append(line)
 
@@ -277,6 +284,7 @@ def convert_video(
     output_dir="./assets/output",
     output_format="image",
     assemble=False,
+    mono=False,
 ):
     """Convert a video or webcam stream to ASCII using ``convert_image`` for each frame.
 
@@ -288,6 +296,7 @@ def convert_video(
         output_format: Output format passed to ``convert_image``.
         assemble: If ``True`` and ``output_format`` is ``image``, frames are
             assembled into an animated GIF using ``imageio``.
+        mono: Render frames in grayscale instead of colour.
     """
 
     import cv2
@@ -316,6 +325,7 @@ def convert_video(
             output_dir=output_dir,
             output_format=output_format,
             base_name=frame_name,
+            mono=mono,
         )
         if assemble and output_format == "image":
             out_path = os.path.join(
@@ -372,6 +382,11 @@ def parse_args(args=None):
         action="store_true",
         help="Use webcam for live capture",
     )
+    parser.add_argument(
+        "--mono",
+        action="store_true",
+        help="Render ASCII art in grayscale instead of colour",
+    )
     return parser.parse_args(args)
 
 
@@ -420,13 +435,14 @@ def main():
             bg_brightness=bg_brightness,
             output_dir=output_dir,
             output_format=output_format,
+            mono=args.mono,
         )
     elif args.batch:
         for name in os.listdir(args.batch):
             full_path = os.path.join(args.batch, name)
             if not os.path.isfile(full_path):
                 continue
-            convert_image(full_path, factor, bg_brightness, output_dir, output_format)
+            convert_image(full_path, factor, bg_brightness, output_dir, output_format, mono=args.mono)
     else:
         image_name = args.input
         if image_name is None:
@@ -434,7 +450,7 @@ def main():
         elif not os.path.isfile(os.path.join("./assets/input", image_name)):
             print(f"Input file '{image_name}' not found")
             return
-        convert_image(image_name, factor, bg_brightness, output_dir, output_format)
+        convert_image(image_name, factor, bg_brightness, output_dir, output_format, mono=args.mono)
 
 
 if __name__ == "__main__":
