@@ -26,6 +26,17 @@ python ascii.py --input image.jpg --scale 0.2 --brightness 30
 If no `--input` is supplied the program will prompt for a file from
 `assets/input`.
 
+## GUI usage
+
+Launch the Tkinter interface with:
+
+```bash
+python -m gui
+```
+
+Use the file picker to choose an image, adjust the scale and brightness sliders,
+and the ASCII preview will update automatically.
+
 ## Generating custom character sets
 
 `computeUnicode.py` exposes `generate_char_array` which analyses each glyph of a
