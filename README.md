@@ -6,8 +6,12 @@ whose "ink" coverage approximates the pixel brightness.
 ## Installation
 
 ```bash
-pip install pillow tkinterdnd2
+pip install -r requirements.txt
 ```
+
+Optional packages:
+- `tkinter` (usually included with Python) and `tkinterdnd2` for the Tk GUI.
+- `tqdm` adds a progress bar to the CLI.
 
 ## Command line usage
 
