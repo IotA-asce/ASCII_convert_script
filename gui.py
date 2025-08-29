@@ -10,7 +10,7 @@ from pathlib import Path
 from PIL import ImageGrab
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
-from ascii import convert_image, load_char_array
+from ascii_art import convert_image, load_char_array
 
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.json"

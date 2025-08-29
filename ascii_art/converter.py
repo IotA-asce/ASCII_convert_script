@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
-from computeUnicode import generate_char_array
+from .charset import generate_char_array
 
 try:
     from tqdm import tqdm

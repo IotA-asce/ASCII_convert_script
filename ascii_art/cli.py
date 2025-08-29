@@ -38,7 +38,7 @@ def parse_args(args=None):
     parser.add_argument(
         "--dynamic-set",
         action="store_true",
-        help="Generate character set dynamically using computeUnicode",
+        help="Generate character set dynamically using charset.generate_char_array",
     )
     parser.add_argument(
         "--font",
