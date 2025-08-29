@@ -2,6 +2,7 @@ import io
 import contextlib
 import re
 import threading
+import json
 import tkinter as tk
 from tkinter import filedialog, scrolledtext, ttk
 from pathlib import Path
@@ -9,7 +10,18 @@ from pathlib import Path
 from PIL import ImageGrab
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
-from ascii import convert_image
+from ascii import convert_image, load_char_array
+
+
+CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
+DEFAULTS = {
+    "input_path": None,
+    "scale": 0.2,
+    "brightness": 30,
+    "format": "image",
+    "dynamic_set": False,
+    "output_dir": "./assets/output",
+}
 
 
 class AsciiGui(TkinterDnD.Tk):
@@ -22,6 +34,13 @@ class AsciiGui(TkinterDnD.Tk):
 
         self.input_path = None
         self._update_job = None
+        self.output_dir = DEFAULTS["output_dir"]
+
+        menubar = tk.Menu(self)
+        opts = tk.Menu(menubar, tearoff=0)
+        opts.add_command(label="Reset to defaults", command=self.reset_defaults)
+        menubar.add_cascade(label="Options", menu=opts)
+        self.config(menu=menubar)
 
         # allow dropping files onto the main window
         self.drop_target_register(DND_FILES)
@@ -33,7 +52,7 @@ class AsciiGui(TkinterDnD.Tk):
         tk.Button(controls, text="Select Image", command=self.select_file).pack(side="left")
 
         tk.Label(controls, text="Scale").pack(side="left", padx=(10, 0))
-        self.scale_var = tk.DoubleVar(value=0.2)
+        self.scale_var = tk.DoubleVar(value=DEFAULTS["scale"])
         self.scale = tk.Scale(
             controls,
             from_=0.1,
@@ -47,7 +66,7 @@ class AsciiGui(TkinterDnD.Tk):
         self.scale.bind("<ButtonRelease>", self.schedule_preview)
 
         tk.Label(controls, text="Brightness").pack(side="left", padx=(10, 0))
-        self.brightness_var = tk.IntVar(value=30)
+        self.brightness_var = tk.IntVar(value=DEFAULTS["brightness"])
         self.brightness = tk.Scale(
             controls,
             from_=0,
@@ -60,9 +79,21 @@ class AsciiGui(TkinterDnD.Tk):
         self.brightness.bind("<ButtonRelease>", self.schedule_preview)
 
         tk.Label(controls, text="Format").pack(side="left", padx=(10, 0))
-        self.format_var = tk.StringVar(value="image")
+        self.format_var = tk.StringVar(value=DEFAULTS["format"])
         tk.OptionMenu(controls, self.format_var, "image", "text", "html").pack(
             side="left"
+        )
+
+        self.dynamic_var = tk.BooleanVar(value=DEFAULTS["dynamic_set"])
+        tk.Checkbutton(
+            controls,
+            text="Dynamic set",
+            variable=self.dynamic_var,
+            command=self.schedule_preview,
+        ).pack(side="left", padx=(10, 0))
+
+        tk.Button(controls, text="Output Dir", command=self.select_output_dir).pack(
+            side="left", padx=(10, 0)
         )
 
         tk.Button(controls, text="Convert", command=self.convert_file).pack(
@@ -81,12 +112,21 @@ class AsciiGui(TkinterDnD.Tk):
         self.progress.pack(fill="x")
         self.progress.pack_forget()
 
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+
+        self.load_config()
+
     def select_file(self) -> None:
         """Prompt for an input image and refresh the preview."""
         path = filedialog.askopenfilename()
         if path:
             self.input_path = path
             self.update_preview()
+
+    def select_output_dir(self) -> None:
+        path = filedialog.askdirectory()
+        if path:
+            self.output_dir = path
 
     def _on_drop(self, event) -> str:
         """Handle a file being dropped onto the window."""
@@ -118,6 +158,7 @@ class AsciiGui(TkinterDnD.Tk):
             self.after(0, lambda: self._update_progress(done, total))
 
         def _worker():
+            load_char_array(dynamic=self.dynamic_var.get())
             buffer = io.BytesIO()
             try:
                 with contextlib.redirect_stdout(
@@ -127,6 +168,7 @@ class AsciiGui(TkinterDnD.Tk):
                         self.input_path,
                         scale_factor=scale,
                         bg_brightness=brightness,
+                        output_dir=self.output_dir,
                         output_format="ansi",
                         mono=True,
                         progress_callback=_progress,
@@ -156,16 +198,18 @@ class AsciiGui(TkinterDnD.Tk):
         scale = self.scale_var.get()
         brightness = self.brightness_var.get()
         fmt = self.format_var.get()
+        load_char_array(dynamic=self.dynamic_var.get())
         convert_image(
             self.input_path,
             scale_factor=scale,
             bg_brightness=brightness,
+            output_dir=self.output_dir,
             output_format=fmt,
         )
         base = Path(self.input_path).stem
         file_stem = f"O_h_{brightness}_f_{scale}_{base}"
         ext = {"image": ".png", "text": ".txt", "html": ".html"}[fmt]
-        output_path = Path("./assets/output") / (file_stem + ext)
+        output_path = Path(self.output_dir) / (file_stem + ext)
         if fmt in ("text", "html"):
             try:
                 with open(output_path, "r", encoding="utf-8") as fh:
@@ -193,6 +237,54 @@ class AsciiGui(TkinterDnD.Tk):
         except tk.TclError:
             import base64
             self.clipboard_append(base64.b64encode(data).decode("ascii"))
+
+    def load_config(self) -> None:
+        if CONFIG_PATH.exists():
+            try:
+                data = json.loads(CONFIG_PATH.read_text())
+            except json.JSONDecodeError:
+                data = {}
+        else:
+            data = {}
+        self.input_path = data.get("input_path") or None
+        self.scale_var.set(data.get("scale", DEFAULTS["scale"]))
+        self.brightness_var.set(data.get("brightness", DEFAULTS["brightness"]))
+        self.format_var.set(data.get("format", DEFAULTS["format"]))
+        self.dynamic_var.set(data.get("dynamic_set", DEFAULTS["dynamic_set"]))
+        self.output_dir = data.get("output_dir", DEFAULTS["output_dir"])
+        if self.input_path:
+            self.update_preview()
+
+    def save_config(self) -> None:
+        data = {
+            "input_path": self.input_path,
+            "scale": self.scale_var.get(),
+            "brightness": self.brightness_var.get(),
+            "format": self.format_var.get(),
+            "dynamic_set": self.dynamic_var.get(),
+            "output_dir": self.output_dir,
+        }
+        try:
+            CONFIG_PATH.write_text(json.dumps(data, indent=2))
+        except OSError:
+            pass
+
+    def on_close(self) -> None:
+        self.save_config()
+        self.destroy()
+
+    def reset_defaults(self) -> None:
+        self.input_path = None
+        self.scale_var.set(DEFAULTS["scale"])
+        self.brightness_var.set(DEFAULTS["brightness"])
+        self.format_var.set(DEFAULTS["format"])
+        self.dynamic_var.set(DEFAULTS["dynamic_set"])
+        self.output_dir = DEFAULTS["output_dir"]
+        self.preview_label.delete("1.0", tk.END)
+        try:
+            CONFIG_PATH.unlink()
+        except OSError:
+            pass
 
 
 def main() -> None:
