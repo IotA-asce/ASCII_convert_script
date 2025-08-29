@@ -4,7 +4,9 @@ import re
 import threading
 import tkinter as tk
 from tkinter import filedialog, scrolledtext, ttk
+from pathlib import Path
 
+from PIL import ImageGrab
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
 from ascii import convert_image
@@ -56,6 +58,21 @@ class AsciiGui(TkinterDnD.Tk):
         self.brightness.pack(side="left")
         self.brightness.bind("<Motion>", self.schedule_preview)
         self.brightness.bind("<ButtonRelease>", self.schedule_preview)
+
+        tk.Label(controls, text="Format").pack(side="left", padx=(10, 0))
+        self.format_var = tk.StringVar(value="image")
+        tk.OptionMenu(controls, self.format_var, "image", "text", "html").pack(
+            side="left"
+        )
+
+        tk.Button(controls, text="Convert", command=self.convert_file).pack(
+            side="left", padx=(10, 0)
+        )
+        self.copy_button = tk.Button(
+            controls, text="Copy to Clipboard", command=self.copy_image
+        )
+        self.copy_button.pack(side="left")
+        self.copy_button.pack_forget()
 
         self.preview_label = scrolledtext.ScrolledText(self, wrap="none")
         self.preview_label.pack(expand=True, fill="both")
@@ -132,6 +149,50 @@ class AsciiGui(TkinterDnD.Tk):
         content = re.sub(r"\x1b\[[0-9;]*m", "", content).lstrip("\n")
         self.preview_label.delete("1.0", tk.END)
         self.preview_label.insert(tk.END, content)
+
+    def convert_file(self) -> None:
+        if not self.input_path:
+            return
+        scale = self.scale_var.get()
+        brightness = self.brightness_var.get()
+        fmt = self.format_var.get()
+        convert_image(
+            self.input_path,
+            scale_factor=scale,
+            bg_brightness=brightness,
+            output_format=fmt,
+        )
+        base = Path(self.input_path).stem
+        file_stem = f"O_h_{brightness}_f_{scale}_{base}"
+        ext = {"image": ".png", "text": ".txt", "html": ".html"}[fmt]
+        output_path = Path("./assets/output") / (file_stem + ext)
+        if fmt in ("text", "html"):
+            try:
+                with open(output_path, "r", encoding="utf-8") as fh:
+                    data = fh.read()
+                self.clipboard_clear()
+                self.clipboard_append(data)
+            except OSError:
+                pass
+            self.copy_button.pack_forget()
+        else:
+            self.copy_button.pack(side="left")
+
+    def copy_image(self) -> None:
+        x = self.preview_label.winfo_rootx()
+        y = self.preview_label.winfo_rooty()
+        w = self.preview_label.winfo_width()
+        h = self.preview_label.winfo_height()
+        img = ImageGrab.grab(bbox=(x, y, x + w, y + h))
+        output = io.BytesIO()
+        img.save(output, format="PNG")
+        data = output.getvalue()
+        self.clipboard_clear()
+        try:
+            self.clipboard_append(data, type="image/png")
+        except tk.TclError:
+            import base64
+            self.clipboard_append(base64.b64encode(data).decode("ascii"))
 
 
 def main() -> None:
