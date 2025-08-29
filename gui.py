@@ -4,7 +4,7 @@ import re
 import threading
 import json
 import tkinter as tk
-from tkinter import filedialog, scrolledtext, ttk
+from tkinter import filedialog, scrolledtext, ttk, messagebox
 from pathlib import Path
 
 from PIL import ImageGrab
@@ -15,7 +15,7 @@ from ascii import convert_image, load_char_array
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
 DEFAULTS = {
-    "input_path": None,
+    "input_paths": [],
     "scale": 0.2,
     "brightness": 30,
     "format": "image",
@@ -33,7 +33,7 @@ class AsciiGui(TkinterDnD.Tk):
         self.title("ASCII Converter")
         self.geometry("800x600")
 
-        self.input_path = None
+        self.input_paths: list[str] = []
         self._update_job = None
         self.output_dir = DEFAULTS["output_dir"]
         self.font_path = DEFAULTS["font_path"]
@@ -48,10 +48,19 @@ class AsciiGui(TkinterDnD.Tk):
         self.drop_target_register(DND_FILES)
         self.dnd_bind("<<Drop>>", self._on_drop)
 
+        file_frame = tk.Frame(self)
+        file_frame.pack(fill="x")
+        self.file_list = tk.Listbox(file_frame, selectmode="browse")
+        self.file_list.pack(side="left", fill="both", expand=True)
+        btn_frame = tk.Frame(file_frame)
+        btn_frame.pack(side="left", padx=(5, 0))
+        tk.Button(btn_frame, text="Add", command=self.add_files).pack(fill="x")
+        tk.Button(btn_frame, text="Remove", command=self.remove_selected).pack(
+            fill="x", pady=(5, 0)
+        )
+
         controls = tk.Frame(self)
         controls.pack(fill="x")
-
-        tk.Button(controls, text="Select Image", command=self.select_file).pack(side="left")
 
         tk.Label(controls, text="Scale").pack(side="left", padx=(10, 0))
         self.scale_var = tk.DoubleVar(value=DEFAULTS["scale"])
@@ -104,7 +113,7 @@ class AsciiGui(TkinterDnD.Tk):
             side="left", padx=(10, 0)
         )
 
-        tk.Button(controls, text="Convert", command=self.convert_file).pack(
+        tk.Button(controls, text="Convert", command=self.convert_files).pack(
             side="left", padx=(10, 0)
         )
         self.copy_button = tk.Button(
@@ -124,11 +133,28 @@ class AsciiGui(TkinterDnD.Tk):
 
         self.load_config()
 
-    def select_file(self) -> None:
-        """Prompt for an input image and refresh the preview."""
-        path = filedialog.askopenfilename()
-        if path:
-            self.input_path = path
+    def add_files(self) -> None:
+        """Prompt for input images and refresh the preview."""
+        paths = filedialog.askopenfilenames()
+        for path in paths:
+            if path and path not in self.input_paths:
+                self.input_paths.append(path)
+                self.file_list.insert(tk.END, path)
+        if self.input_paths:
+            self.file_list.selection_clear(0, tk.END)
+            self.file_list.selection_set(0)
+            self.update_preview()
+
+    def remove_selected(self) -> None:
+        sel = list(self.file_list.curselection())
+        for index in reversed(sel):
+            path = self.file_list.get(index)
+            self.input_paths.remove(path)
+            self.file_list.delete(index)
+        if not self.input_paths:
+            self.preview_label.delete("1.0", tk.END)
+        else:
+            self.file_list.selection_set(0)
             self.update_preview()
 
     def select_font(self) -> None:
@@ -149,8 +175,15 @@ class AsciiGui(TkinterDnD.Tk):
     def _on_drop(self, event) -> str:
         """Handle a file being dropped onto the window."""
         paths = self.tk.splitlist(event.data)
-        if paths:
-            self.input_path = paths[0]
+        added = False
+        for path in paths:
+            if path and path not in self.input_paths:
+                self.input_paths.append(path)
+                self.file_list.insert(tk.END, path)
+                added = True
+        if added:
+            self.file_list.selection_clear(0, tk.END)
+            self.file_list.selection_set(0)
             self.update_preview()
         return event.action
 
@@ -162,11 +195,17 @@ class AsciiGui(TkinterDnD.Tk):
 
     def update_preview(self) -> None:
         """Run conversion and display ASCII art in the preview box."""
-        if not self.input_path:
+        if not self.input_paths:
             return
         if self._update_job is not None:
             self.after_cancel(self._update_job)
             self._update_job = None
+        sel = self.file_list.curselection()
+        if sel:
+            path = self.file_list.get(sel[0])
+        else:
+            path = self.input_paths[0]
+            self.file_list.selection_set(0)
         scale = self.scale_var.get()
         brightness = self.brightness_var.get()
         self.progress["value"] = 0
@@ -183,7 +222,7 @@ class AsciiGui(TkinterDnD.Tk):
                     io.TextIOWrapper(buffer, encoding="utf-8", write_through=True)
                 ):
                     convert_image(
-                        self.input_path,
+                        path,
                         scale_factor=scale,
                         bg_brightness=brightness,
                         output_dir=self.output_dir,
@@ -211,22 +250,38 @@ class AsciiGui(TkinterDnD.Tk):
         self.preview_label.delete("1.0", tk.END)
         self.preview_label.insert(tk.END, content)
 
-    def convert_file(self) -> None:
-        if not self.input_path:
+    def convert_files(self) -> None:
+        if not self.input_paths:
             return
         scale = self.scale_var.get()
         brightness = self.brightness_var.get()
         fmt = self.format_var.get()
-        load_char_array(dynamic=self.dynamic_var.get(), font_path=self.font_path)
-        convert_image(
-            self.input_path,
-            scale_factor=scale,
-            bg_brightness=brightness,
-            output_dir=self.output_dir,
-            output_format=fmt,
-            font_path=self.font_path,
-        )
-        base = Path(self.input_path).stem
+        files = list(self.input_paths)
+        total = len(files)
+        self.progress["value"] = 0
+        self.progress["maximum"] = total
+        self.progress.pack(fill="x")
+
+        def _worker():
+            load_char_array(dynamic=self.dynamic_var.get(), font_path=self.font_path)
+            for i, path in enumerate(files, 1):
+                convert_image(
+                    path,
+                    scale_factor=scale,
+                    bg_brightness=brightness,
+                    output_dir=self.output_dir,
+                    output_format=fmt,
+                    font_path=self.font_path,
+                )
+                self.after(0, lambda done=i: self._update_progress(done, total))
+            self.after(0, lambda: self._finish_convert(files, fmt, brightness, scale))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _finish_convert(self, files, fmt, brightness, scale) -> None:
+        self.progress.pack_forget()
+        first = files[0]
+        base = Path(first).stem
         file_stem = f"O_h_{brightness}_f_{scale}_{base}"
         ext = {"image": ".png", "text": ".txt", "html": ".html"}[fmt]
         output_path = Path(self.output_dir) / (file_stem + ext)
@@ -241,6 +296,10 @@ class AsciiGui(TkinterDnD.Tk):
             self.copy_button.pack_forget()
         else:
             self.copy_button.pack(side="left")
+        if messagebox.askyesno("Preview", "Preview first result?"):
+            self.file_list.selection_clear(0, tk.END)
+            self.file_list.selection_set(0)
+            self.update_preview()
 
     def copy_image(self) -> None:
         x = self.preview_label.winfo_rootx()
@@ -266,7 +325,17 @@ class AsciiGui(TkinterDnD.Tk):
                 data = {}
         else:
             data = {}
-        self.input_path = data.get("input_path") or None
+        paths = data.get("input_paths") or []
+        if not paths and data.get("input_path"):
+            paths = [data.get("input_path")]
+        self.input_paths = []
+        for p in paths:
+            if p:
+                self.input_paths.append(p)
+                self.file_list.insert(tk.END, p)
+        if self.input_paths:
+            self.file_list.selection_set(0)
+            self.update_preview()
         self.scale_var.set(data.get("scale", DEFAULTS["scale"]))
         self.brightness_var.set(data.get("brightness", DEFAULTS["brightness"]))
         self.format_var.set(data.get("format", DEFAULTS["format"]))
@@ -275,12 +344,10 @@ class AsciiGui(TkinterDnD.Tk):
         self.font_path = data.get("font_path") or None
         if self.font_path:
             self.font_var.set(Path(self.font_path).name)
-        if self.input_path:
-            self.update_preview()
 
     def save_config(self) -> None:
         data = {
-            "input_path": self.input_path,
+            "input_paths": self.input_paths,
             "scale": self.scale_var.get(),
             "brightness": self.brightness_var.get(),
             "format": self.format_var.get(),
@@ -298,7 +365,8 @@ class AsciiGui(TkinterDnD.Tk):
         self.destroy()
 
     def reset_defaults(self) -> None:
-        self.input_path = None
+        self.input_paths = []
+        self.file_list.delete(0, tk.END)
         self.scale_var.set(DEFAULTS["scale"])
         self.brightness_var.set(DEFAULTS["brightness"])
         self.format_var.set(DEFAULTS["format"])
