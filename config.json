@@ -4,5 +4,6 @@
   "brightness": 30,
   "format": "image",
   "dynamic_set": false,
-  "output_dir": "./assets/output"
+  "output_dir": "./assets/output",
+  "font_path": null
 }
