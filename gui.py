@@ -21,6 +21,7 @@ DEFAULTS = {
     "format": "image",
     "dynamic_set": False,
     "output_dir": "./assets/output",
+    "font_path": None,
 }
 
 
@@ -35,6 +36,7 @@ class AsciiGui(TkinterDnD.Tk):
         self.input_path = None
         self._update_job = None
         self.output_dir = DEFAULTS["output_dir"]
+        self.font_path = DEFAULTS["font_path"]
 
         menubar = tk.Menu(self)
         opts = tk.Menu(menubar, tearoff=0)
@@ -92,6 +94,12 @@ class AsciiGui(TkinterDnD.Tk):
             command=self.schedule_preview,
         ).pack(side="left", padx=(10, 0))
 
+        tk.Button(controls, text="Font...", command=self.select_font).pack(
+            side="left", padx=(10, 0)
+        )
+        self.font_var = tk.StringVar(value="System font")
+        tk.Label(controls, textvariable=self.font_var).pack(side="left")
+
         tk.Button(controls, text="Output Dir", command=self.select_output_dir).pack(
             side="left", padx=(10, 0)
         )
@@ -122,6 +130,16 @@ class AsciiGui(TkinterDnD.Tk):
         if path:
             self.input_path = path
             self.update_preview()
+
+    def select_font(self) -> None:
+        """Prompt for a TTF font and refresh the preview."""
+        path = filedialog.askopenfilename(
+            filetypes=[("TrueType Font", "*.ttf"), ("All Files", "*.*")]
+        )
+        if path:
+            self.font_path = path
+            self.font_var.set(Path(path).name)
+            self.schedule_preview()
 
     def select_output_dir(self) -> None:
         path = filedialog.askdirectory()
@@ -158,7 +176,7 @@ class AsciiGui(TkinterDnD.Tk):
             self.after(0, lambda: self._update_progress(done, total))
 
         def _worker():
-            load_char_array(dynamic=self.dynamic_var.get())
+            load_char_array(dynamic=self.dynamic_var.get(), font_path=self.font_path)
             buffer = io.BytesIO()
             try:
                 with contextlib.redirect_stdout(
@@ -171,6 +189,7 @@ class AsciiGui(TkinterDnD.Tk):
                         output_dir=self.output_dir,
                         output_format="ansi",
                         mono=True,
+                        font_path=self.font_path,
                         progress_callback=_progress,
                     )
                 content = buffer.getvalue().decode("utf-8")
@@ -198,13 +217,14 @@ class AsciiGui(TkinterDnD.Tk):
         scale = self.scale_var.get()
         brightness = self.brightness_var.get()
         fmt = self.format_var.get()
-        load_char_array(dynamic=self.dynamic_var.get())
+        load_char_array(dynamic=self.dynamic_var.get(), font_path=self.font_path)
         convert_image(
             self.input_path,
             scale_factor=scale,
             bg_brightness=brightness,
             output_dir=self.output_dir,
             output_format=fmt,
+            font_path=self.font_path,
         )
         base = Path(self.input_path).stem
         file_stem = f"O_h_{brightness}_f_{scale}_{base}"
@@ -252,6 +272,9 @@ class AsciiGui(TkinterDnD.Tk):
         self.format_var.set(data.get("format", DEFAULTS["format"]))
         self.dynamic_var.set(data.get("dynamic_set", DEFAULTS["dynamic_set"]))
         self.output_dir = data.get("output_dir", DEFAULTS["output_dir"])
+        self.font_path = data.get("font_path") or None
+        if self.font_path:
+            self.font_var.set(Path(self.font_path).name)
         if self.input_path:
             self.update_preview()
 
@@ -263,6 +286,7 @@ class AsciiGui(TkinterDnD.Tk):
             "format": self.format_var.get(),
             "dynamic_set": self.dynamic_var.get(),
             "output_dir": self.output_dir,
+            "font_path": self.font_path,
         }
         try:
             CONFIG_PATH.write_text(json.dumps(data, indent=2))
@@ -280,6 +304,8 @@ class AsciiGui(TkinterDnD.Tk):
         self.format_var.set(DEFAULTS["format"])
         self.dynamic_var.set(DEFAULTS["dynamic_set"])
         self.output_dir = DEFAULTS["output_dir"]
+        self.font_path = DEFAULTS["font_path"]
+        self.font_var.set("System font")
         self.preview_label.delete("1.0", tk.END)
         try:
             CONFIG_PATH.unlink()
