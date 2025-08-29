@@ -21,7 +21,7 @@ python ascii.py --input image.jpg --scale 0.2 --brightness 30 --mono
   HTML with coloured spans.
 - `--batch <directory>`: convert every image in a directory.
 - `--dynamic-set`: build a brightness-ranked character set using
-  `computeUnicode.py`.
+  `ascii_art.charset`.
 - `--mono`: render ASCII output in grayscale instead of colour.
 
 If no `--input` is supplied the program will prompt for a file from
@@ -40,8 +40,8 @@ and brightness sliders, and the ASCII preview will update automatically.
 
 ## Generating custom character sets
 
-`computeUnicode.py` exposes `generate_char_array` which analyses each glyph of a
-font and sorts characters by coverage. The CLI `--dynamic-set` flag leverages
+`ascii_art/charset.py` exposes `generate_char_array` which analyses each glyph of
+a font and sorts characters by coverage. The CLI `--dynamic-set` flag leverages
 this function automatically.
 
 ## Testing
