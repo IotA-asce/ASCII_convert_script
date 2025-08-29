@@ -10,10 +10,10 @@ from pathlib import Path
 from PIL import ImageGrab
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
-from ascii_art import convert_image, load_char_array
+from ascii_art import converter, charset
 
 
-CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
+CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
 DEFAULTS = {
     "input_paths": [],
     "scale": 0.2,
@@ -240,13 +240,13 @@ class AsciiGui(TkinterDnD.Tk):
             self.after(0, lambda: self._update_progress(done, total))
 
         def _worker():
-            load_char_array(dynamic=self.dynamic_var.get(), font_path=self.font_path)
+            charset.load_char_array(dynamic=self.dynamic_var.get(), font_path=self.font_path)
             buffer = io.BytesIO()
             try:
                 with contextlib.redirect_stdout(
                     io.TextIOWrapper(buffer, encoding="utf-8", write_through=True)
                 ):
-                    convert_image(
+                    converter.convert_image(
                         path,
                         scale_factor=scale,
                         bg_brightness=brightness,
@@ -288,9 +288,9 @@ class AsciiGui(TkinterDnD.Tk):
         self.progress.pack(fill="x")
 
         def _worker():
-            load_char_array(dynamic=self.dynamic_var.get(), font_path=self.font_path)
+            charset.load_char_array(dynamic=self.dynamic_var.get(), font_path=self.font_path)
             for i, path in enumerate(files, 1):
-                convert_image(
+                converter.convert_image(
                     path,
                     scale_factor=scale,
                     bg_brightness=brightness,

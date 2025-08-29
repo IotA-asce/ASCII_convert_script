@@ -32,7 +32,7 @@ If no `--input` is supplied the program will prompt for a file from
 Launch the Tkinter interface with:
 
 ```bash
-python -m gui
+python -m ascii_art.gui
 ```
 
 Use the file picker or drag and drop an image onto the window, adjust the scale
