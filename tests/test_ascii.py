@@ -5,7 +5,7 @@ import sys
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import ascii as ascii_mod
+import ascii_art as ascii_mod
 
 
 def test_get_char_range():
