@@ -22,6 +22,12 @@ DEFAULTS = {
     "dynamic_set": False,
     "output_dir": "./assets/output",
     "font_path": None,
+    "theme": "light",
+}
+
+THEMES = {
+    "light": {"bg": "#ffffff", "fg": "#000000", "accent": "#007fff"},
+    "dark": {"bg": "#2e2e2e", "fg": "#f0f0f0", "accent": "#4f9dff"},
 }
 
 
@@ -38,34 +44,49 @@ class AsciiGui(TkinterDnD.Tk):
         self.output_dir = DEFAULTS["output_dir"]
         self.font_path = DEFAULTS["font_path"]
 
-        menubar = tk.Menu(self)
-        opts = tk.Menu(menubar, tearoff=0)
-        opts.add_command(label="Reset to defaults", command=self.reset_defaults)
-        menubar.add_cascade(label="Options", menu=opts)
-        self.config(menu=menubar)
+        self.menubar = tk.Menu(self)
+        self.opts = tk.Menu(self.menubar, tearoff=0)
+        self.opts.add_command(label="Reset to defaults", command=self.reset_defaults)
+        self.theme_var = tk.StringVar(value=DEFAULTS["theme"])
+        self.theme_menu = tk.Menu(self.opts, tearoff=0)
+        self.theme_menu.add_radiobutton(
+            label="Light",
+            value="light",
+            variable=self.theme_var,
+            command=self.apply_theme,
+        )
+        self.theme_menu.add_radiobutton(
+            label="Dark",
+            value="dark",
+            variable=self.theme_var,
+            command=self.apply_theme,
+        )
+        self.opts.add_cascade(label="Theme", menu=self.theme_menu)
+        self.menubar.add_cascade(label="Options", menu=self.opts)
+        self.config(menu=self.menubar)
 
         # allow dropping files onto the main window
         self.drop_target_register(DND_FILES)
         self.dnd_bind("<<Drop>>", self._on_drop)
 
-        file_frame = tk.Frame(self)
-        file_frame.pack(fill="x")
-        self.file_list = tk.Listbox(file_frame, selectmode="browse")
+        self.file_frame = tk.Frame(self)
+        self.file_frame.pack(fill="x")
+        self.file_list = tk.Listbox(self.file_frame, selectmode="browse")
         self.file_list.pack(side="left", fill="both", expand=True)
-        btn_frame = tk.Frame(file_frame)
-        btn_frame.pack(side="left", padx=(5, 0))
-        tk.Button(btn_frame, text="Add", command=self.add_files).pack(fill="x")
-        tk.Button(btn_frame, text="Remove", command=self.remove_selected).pack(
+        self.btn_frame = tk.Frame(self.file_frame)
+        self.btn_frame.pack(side="left", padx=(5, 0))
+        tk.Button(self.btn_frame, text="Add", command=self.add_files).pack(fill="x")
+        tk.Button(self.btn_frame, text="Remove", command=self.remove_selected).pack(
             fill="x", pady=(5, 0)
         )
 
-        controls = tk.Frame(self)
-        controls.pack(fill="x")
+        self.controls = tk.Frame(self)
+        self.controls.pack(fill="x")
 
-        tk.Label(controls, text="Scale").pack(side="left", padx=(10, 0))
+        tk.Label(self.controls, text="Scale").pack(side="left", padx=(10, 0))
         self.scale_var = tk.DoubleVar(value=DEFAULTS["scale"])
         self.scale = tk.Scale(
-            controls,
+            self.controls,
             from_=0.1,
             to=1.0,
             orient="horizontal",
@@ -76,10 +97,10 @@ class AsciiGui(TkinterDnD.Tk):
         self.scale.bind("<Motion>", self.schedule_preview)
         self.scale.bind("<ButtonRelease>", self.schedule_preview)
 
-        tk.Label(controls, text="Brightness").pack(side="left", padx=(10, 0))
+        tk.Label(self.controls, text="Brightness").pack(side="left", padx=(10, 0))
         self.brightness_var = tk.IntVar(value=DEFAULTS["brightness"])
         self.brightness = tk.Scale(
-            controls,
+            self.controls,
             from_=0,
             to=255,
             orient="horizontal",
@@ -89,35 +110,38 @@ class AsciiGui(TkinterDnD.Tk):
         self.brightness.bind("<Motion>", self.schedule_preview)
         self.brightness.bind("<ButtonRelease>", self.schedule_preview)
 
-        tk.Label(controls, text="Format").pack(side="left", padx=(10, 0))
+        tk.Label(self.controls, text="Format").pack(side="left", padx=(10, 0))
         self.format_var = tk.StringVar(value=DEFAULTS["format"])
-        tk.OptionMenu(controls, self.format_var, "image", "text", "html").pack(
-            side="left"
+        self.format_menu = tk.OptionMenu(
+            self.controls, self.format_var, "image", "text", "html"
         )
+        self.format_menu.pack(side="left")
 
         self.dynamic_var = tk.BooleanVar(value=DEFAULTS["dynamic_set"])
         tk.Checkbutton(
-            controls,
+            self.controls,
             text="Dynamic set",
             variable=self.dynamic_var,
             command=self.schedule_preview,
         ).pack(side="left", padx=(10, 0))
 
-        tk.Button(controls, text="Font...", command=self.select_font).pack(
+        tk.Button(self.controls, text="Font...", command=self.select_font).pack(
             side="left", padx=(10, 0)
         )
         self.font_var = tk.StringVar(value="System font")
-        tk.Label(controls, textvariable=self.font_var).pack(side="left")
+        tk.Label(self.controls, textvariable=self.font_var).pack(side="left")
 
-        tk.Button(controls, text="Output Dir", command=self.select_output_dir).pack(
+        tk.Button(
+            self.controls, text="Output Dir", command=self.select_output_dir
+        ).pack(
             side="left", padx=(10, 0)
         )
 
-        tk.Button(controls, text="Convert", command=self.convert_files).pack(
+        tk.Button(self.controls, text="Convert", command=self.convert_files).pack(
             side="left", padx=(10, 0)
         )
         self.copy_button = tk.Button(
-            controls, text="Copy to Clipboard", command=self.copy_image
+            self.controls, text="Copy to Clipboard", command=self.copy_image
         )
         self.copy_button.pack(side="left")
         self.copy_button.pack_forget()
@@ -129,6 +153,7 @@ class AsciiGui(TkinterDnD.Tk):
         self.progress.pack(fill="x")
         self.progress.pack_forget()
 
+        self.style = ttk.Style(self)
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
         self.load_config()
@@ -317,6 +342,51 @@ class AsciiGui(TkinterDnD.Tk):
             import base64
             self.clipboard_append(base64.b64encode(data).decode("ascii"))
 
+    def apply_theme(self) -> None:
+        theme = THEMES.get(self.theme_var.get(), THEMES["light"])
+        bg = theme["bg"]
+        fg = theme["fg"]
+
+        # configure ttk styles
+        self.style.configure("TFrame", background=bg)
+        self.style.configure("TLabel", background=bg, foreground=fg)
+        self.style.configure("TButton", background=bg, foreground=fg)
+        self.style.configure("TCheckbutton", background=bg, foreground=fg)
+        self.style.configure("TMenubutton", background=bg, foreground=fg)
+        self.style.configure(
+            "Theme.TProgressbar",
+            background=theme["accent"],
+            troughcolor=bg,
+        )
+        self.progress.configure(style="Theme.TProgressbar")
+
+        # tk widgets
+        self.configure(bg=bg)
+
+        def _recurse(widget):
+            for child in widget.winfo_children():
+                try:
+                    child.configure(bg=bg, fg=fg)
+                except tk.TclError:
+                    try:
+                        child.configure(bg=bg)
+                    except tk.TclError:
+                        pass
+                _recurse(child)
+
+        _recurse(self)
+
+        self.preview_label.configure(insertbackground=fg)
+        self.file_list.configure(
+            selectbackground=theme["accent"], selectforeground=fg
+        )
+        # menus need explicit configuration
+        for menu in [self.menubar, self.opts, self.theme_menu, self.format_menu["menu"]]:
+            try:
+                menu.configure(bg=bg, fg=fg)
+            except tk.TclError:
+                pass
+
     def load_config(self) -> None:
         if CONFIG_PATH.exists():
             try:
@@ -344,6 +414,8 @@ class AsciiGui(TkinterDnD.Tk):
         self.font_path = data.get("font_path") or None
         if self.font_path:
             self.font_var.set(Path(self.font_path).name)
+        self.theme_var.set(data.get("theme", DEFAULTS["theme"]))
+        self.apply_theme()
 
     def save_config(self) -> None:
         data = {
@@ -354,6 +426,7 @@ class AsciiGui(TkinterDnD.Tk):
             "dynamic_set": self.dynamic_var.get(),
             "output_dir": self.output_dir,
             "font_path": self.font_path,
+            "theme": self.theme_var.get(),
         }
         try:
             CONFIG_PATH.write_text(json.dumps(data, indent=2))
@@ -375,6 +448,8 @@ class AsciiGui(TkinterDnD.Tk):
         self.font_path = DEFAULTS["font_path"]
         self.font_var.set("System font")
         self.preview_label.delete("1.0", tk.END)
+        self.theme_var.set(DEFAULTS["theme"])
+        self.apply_theme()
         try:
             CONFIG_PATH.unlink()
         except OSError:
