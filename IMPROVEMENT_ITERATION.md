@@ -16,10 +16,10 @@ Each section is a self-contained checklist.
 - [x] Document best use cases (gradients, low-contrast scenes)
 
 ## 3) Configurable character cell size (feature)
-- [ ] Add `--cell-width` and `--cell-height` (defaults 10x18)
-- [ ] Apply to aspect correction and output canvas sizing consistently
-- [ ] Add an "Advanced" section in the GUI for these settings
-- [ ] Add a smoke test for non-default cell sizes
+- [x] Add `--cell-width` and `--cell-height` (defaults 10x18)
+- [x] Apply to aspect correction and output canvas sizing consistently
+- [x] Add an "Advanced" section in the GUI for these settings
+- [x] Add a smoke test for non-default cell sizes
 
 ## 4) Faster `format=image` rendering (performance)
 - [ ] Cache per-character glyph masks for the chosen font + size

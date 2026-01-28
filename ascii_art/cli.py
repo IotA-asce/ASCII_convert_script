@@ -9,6 +9,8 @@ from .converter import (
     list_files_from_assets,
     load_char_array,
     loader,
+    ONE_CHAR_HEIGHT,
+    ONE_CHAR_WIDTH,
 )
 
 
@@ -21,6 +23,12 @@ def _validate_scale(val: float) -> float:
 def _validate_brightness(val: int) -> int:
     if not 0 <= val <= 255:
         raise ValueError("Brightness must be between 0 and 255")
+    return val
+
+
+def _validate_cell_size(val: int) -> int:
+    if val <= 0:
+        raise ValueError("Cell size must be a positive integer")
     return val
 
 
@@ -77,6 +85,16 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
         choices=["none", "floyd-steinberg", "atkinson"],
         help="Optional dithering applied before character selection",
     )
+    parser.add_argument(
+        "--cell-width",
+        type=int,
+        help="Character cell width in pixels (image output + aspect correction)",
+    )
+    parser.add_argument(
+        "--cell-height",
+        type=int,
+        help="Character cell height in pixels (image output + aspect correction)",
+    )
     return parser.parse_args(args)
 
 
@@ -103,6 +121,13 @@ def main():
     grayscale_mode = args.grayscale if args.grayscale is not None else "avg"
     dither_mode = args.dither if args.dither is not None else "none"
 
+    cell_width = _validate_cell_size(
+        args.cell_width if args.cell_width is not None else ONE_CHAR_WIDTH
+    )
+    cell_height = _validate_cell_size(
+        args.cell_height if args.cell_height is not None else ONE_CHAR_HEIGHT
+    )
+
     if args.video and args.webcam:
         print("Choose either --video or --webcam, not both")
         return
@@ -119,6 +144,8 @@ def main():
             font_path=args.font,
             grayscale_mode=grayscale_mode,
             dither=dither_mode,
+            cell_width=cell_width,
+            cell_height=cell_height,
         )
     elif args.batch:
         batch_dir = Path(args.batch)
@@ -135,6 +162,8 @@ def main():
                 font_path=args.font,
                 grayscale_mode=grayscale_mode,
                 dither=dither_mode,
+                cell_width=cell_width,
+                cell_height=cell_height,
             )
             progress.update(1)
         progress.close()
@@ -152,6 +181,8 @@ def main():
             font_path=args.font,
             grayscale_mode=grayscale_mode,
             dither=dither_mode,
+            cell_width=cell_width,
+            cell_height=cell_height,
         )
 
 

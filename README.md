@@ -68,6 +68,10 @@ Rendering
 - `--dither {none,floyd-steinberg,atkinson}`: optional error-diffusion dithering
   applied to brightness before character selection (default: `none`).
   - Use it for smoother gradients; it is slower.
+- `--cell-width <int>` / `--cell-height <int>`: character cell size in pixels.
+  This affects:
+  - `format=image` output pixel dimensions, and
+  - the resize aspect correction used to compute the number of rows.
 
 Character set / fonts
 - `--dynamic-set`: generate a brightness-ranked character set via `ascii_art.charset`.
@@ -187,6 +191,11 @@ Dither (select)
 - What it does: applies error-diffusion dithering to reduce banding in smooth
   gradients (slower).
 - Options: `none` (default), `floyd-steinberg`, `atkinson`.
+
+Advanced: Cell width / Cell height
+- What it does: sets the pixel size of each character cell in `format=image` and
+  the aspect correction used when resizing.
+- Example: smaller `cell_height` increases output rows for the same input.
 
 Dynamic character set (checkbox)
 - What it does: generates a brightness-ranked character set using

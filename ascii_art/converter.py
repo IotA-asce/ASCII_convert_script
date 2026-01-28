@@ -401,6 +401,8 @@ def convert_image(
     font_path: str | None = None,
     grayscale_mode: str = "avg",
     dither: str = "none",
+    cell_width: int = ONE_CHAR_WIDTH,
+    cell_height: int = ONE_CHAR_HEIGHT,
     progress_callback: Callable[[int, int], None] | None = None,
 ) -> None:
     """
@@ -428,6 +430,11 @@ def convert_image(
         dither (str): Optional error-diffusion dithering applied to brightness
             before character selection. One of: `none`, `floyd-steinberg`,
             `atkinson`.
+        cell_width (int): Width (in pixels) of one character cell when rendering
+            `format=image`. Also used for aspect correction when resizing.
+        cell_height (int): Height (in pixels) of one character cell when
+            rendering `format=image`. Also used for aspect correction when
+            resizing.
         progress_callback (callable, optional): Callback invoked as
             ``progress_callback(current, total)`` to report the number of
             processed rows.
@@ -465,13 +472,13 @@ def convert_image(
         linux_font = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
         if user_font:
             try:
-                return ImageFont.truetype(user_font, ONE_CHAR_HEIGHT)
+                return ImageFont.truetype(user_font, cell_height)
             except OSError:
                 print(f"Could not load font '{user_font}', falling back to defaults")
         if os.path.exists(windows_font):
-            return ImageFont.truetype(windows_font, ONE_CHAR_HEIGHT)
+            return ImageFont.truetype(windows_font, cell_height)
         if os.path.exists(linux_font):
-            return ImageFont.truetype(linux_font, ONE_CHAR_HEIGHT)
+            return ImageFont.truetype(linux_font, cell_height)
         return ImageFont.load_default()
 
     try:
@@ -489,6 +496,11 @@ def convert_image(
     if dither not in ("none", "floyd-steinberg", "atkinson"):
         raise ValueError("dither must be one of: none, floyd-steinberg, atkinson")
 
+    cell_width = int(cell_width)
+    cell_height = int(cell_height)
+    if cell_width <= 0 or cell_height <= 0:
+        raise ValueError("cell_width and cell_height must be positive integers")
+
     is_animated = getattr(_im, "is_animated", False)
     n_frames = int(getattr(_im, "n_frames", 1)) if is_animated else 1
     frames_iter = ImageSequence.Iterator(_im) if is_animated else (_im,)
@@ -500,7 +512,7 @@ def convert_image(
         frame = frame.resize(
             (
                 max(1, int(scale_factor * width)),
-                max(1, int(scale_factor * height * (ONE_CHAR_WIDTH / ONE_CHAR_HEIGHT))),
+                max(1, int(scale_factor * height * (cell_width / cell_height))),
             ),
             _RESAMPLE_NEAREST,
         )
@@ -526,7 +538,7 @@ def convert_image(
         if output_format == "image":
             output_image = Image.new(
                 "RGB",
-                (ONE_CHAR_WIDTH * width, ONE_CHAR_HEIGHT * height),
+                (cell_width * width, cell_height * height),
                 color=(bg_brightness, bg_brightness, bg_brightness),
             )
             draw = ImageDraw.Draw(output_image)
@@ -553,12 +565,12 @@ def convert_image(
             progress_callback(0, height)
         if output_format == "image":
             assert draw is not None
-            x_positions = [x * ONE_CHAR_WIDTH for x in range(width)]
+            x_positions = [x * cell_width for x in range(width)]
             if dither == "none":
                 if is_avg:
                     for y in range(height):
                         row = rgb_bytes[y * stride : (y + 1) * stride]
-                        y_pos = y * ONE_CHAR_HEIGHT
+                        y_pos = y * cell_height
                         off = 0
                         for x in range(width):
                             r = row[off]
@@ -581,7 +593,7 @@ def convert_image(
                 else:
                     for y in range(height):
                         row = rgb_bytes[y * stride : (y + 1) * stride]
-                        y_pos = y * ONE_CHAR_HEIGHT
+                        y_pos = y * cell_height
                         off = 0
                         for x in range(width):
                             r = row[off]
@@ -606,7 +618,7 @@ def convert_image(
                 err_next = [0.0] * (width + 2)
                 for y in range(height):
                     row = rgb_bytes[y * stride : (y + 1) * stride]
-                    y_pos = y * ONE_CHAR_HEIGHT
+                    y_pos = y * cell_height
                     err_curr, err_next = err_next, [0.0] * (width + 2)
                     off = 0
                     for x in range(width):
@@ -657,7 +669,7 @@ def convert_image(
                 err_next2 = [0.0] * (width + 4)
                 for y in range(height):
                     row = rgb_bytes[y * stride : (y + 1) * stride]
-                    y_pos = y * ONE_CHAR_HEIGHT
+                    y_pos = y * cell_height
                     err_curr, err_next, err_next2 = (
                         err_next,
                         err_next2,
@@ -1212,6 +1224,8 @@ def convert_video(
     font_path=None,
     grayscale_mode: str = "avg",
     dither: str = "none",
+    cell_width: int = ONE_CHAR_WIDTH,
+    cell_height: int = ONE_CHAR_HEIGHT,
 ):
     """Convert a video or webcam stream to ASCII using ``convert_image`` for each frame.
 
@@ -1262,6 +1276,8 @@ def convert_video(
             font_path=font_path,
             grayscale_mode=grayscale_mode,
             dither=dither,
+            cell_width=cell_width,
+            cell_height=cell_height,
         )
         if assemble and output_format == "image":
             out_path = os.path.join(

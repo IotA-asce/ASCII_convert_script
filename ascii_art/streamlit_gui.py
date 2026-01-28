@@ -44,6 +44,8 @@ DEFAULTS: dict[str, Any] = {
     "brightness": 30,
     "grayscale": "avg",
     "dither": "none",
+    "cell_width": converter.ONE_CHAR_WIDTH,
+    "cell_height": converter.ONE_CHAR_HEIGHT,
     "format": "image",
     "dynamic_set": False,
     "output_dir": "./assets/output",
@@ -131,6 +133,8 @@ def _ansi_preview(
     brightness: int,
     grayscale_mode: str,
     dither: str,
+    cell_width: int,
+    cell_height: int,
     dynamic_set: bool,
     font_path: str | None,
     progress_cb,
@@ -148,6 +152,8 @@ def _ansi_preview(
             font_path=font_path,
             grayscale_mode=grayscale_mode,
             dither=dither,
+            cell_width=int(cell_width),
+            cell_height=int(cell_height),
             progress_callback=progress_cb,
             base_name="preview",
         )
@@ -185,6 +191,8 @@ def _render_ascii_image(
     font_path: str | None,
     grayscale_mode: str,
     dither: str,
+    cell_width: int,
+    cell_height: int,
     font: ImageFont.ImageFont | None = None,
     char_map: list[str] | None = None,
 ) -> Image.Image:
@@ -197,31 +205,27 @@ def _render_ascii_image(
         linux_font = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
         if user_font:
             try:
-                return ImageFont.truetype(user_font, converter.ONE_CHAR_HEIGHT)
+                return ImageFont.truetype(user_font, int(cell_height))
             except OSError:
                 pass
         if Path(windows_font).exists():
-            return ImageFont.truetype(windows_font, converter.ONE_CHAR_HEIGHT)
+            return ImageFont.truetype(windows_font, int(cell_height))
         if Path(linux_font).exists():
-            return ImageFont.truetype(linux_font, converter.ONE_CHAR_HEIGHT)
+            return ImageFont.truetype(linux_font, int(cell_height))
         return ImageFont.load_default()
 
     width, height = img.size
     new_w = max(1, int(scale_factor * width))
     new_h = max(
         1,
-        int(
-            scale_factor
-            * height
-            * (converter.ONE_CHAR_WIDTH / converter.ONE_CHAR_HEIGHT)
-        ),
+        int(scale_factor * height * (float(cell_width) / float(cell_height))),
     )
     frame = img.resize((new_w, new_h), _RESAMPLE_NEAREST).convert("RGB")
     pix = frame.load()
 
     out = Image.new(
         "RGB",
-        (converter.ONE_CHAR_WIDTH * new_w, converter.ONE_CHAR_HEIGHT * new_h),
+        (int(cell_width) * new_w, int(cell_height) * new_h),
         color=(bg_brightness, bg_brightness, bg_brightness),
     )
     draw = ImageDraw.Draw(out)
@@ -259,7 +263,7 @@ def _render_ascii_image(
                 ch = char_map[h]
                 color = (h, h, h) if mono else (r, g, b)
                 draw.text(
-                    (x * converter.ONE_CHAR_WIDTH, y * converter.ONE_CHAR_HEIGHT),
+                    (x * int(cell_width), y * int(cell_height)),
                     ch,
                     font=font,
                     fill=color,
@@ -297,7 +301,7 @@ def _render_ascii_image(
                 ch = char_map[qh]
                 color = (qh, qh, qh) if mono else (r, g, b)
                 draw.text(
-                    (x * converter.ONE_CHAR_WIDTH, y * converter.ONE_CHAR_HEIGHT),
+                    (x * int(cell_width), y * int(cell_height)),
                     ch,
                     font=font,
                     fill=color,
@@ -339,7 +343,7 @@ def _render_ascii_image(
             ch = char_map[qh]
             color = (qh, qh, qh) if mono else (r, g, b)
             draw.text(
-                (x * converter.ONE_CHAR_WIDTH, y * converter.ONE_CHAR_HEIGHT),
+                (x * int(cell_width), y * int(cell_height)),
                 ch,
                 font=font,
                 fill=color,
@@ -355,6 +359,8 @@ def _convert_and_collect_outputs(
     brightness: int,
     grayscale_mode: str,
     dither: str,
+    cell_width: int,
+    cell_height: int,
     output_format: str,
     output_dir: str,
     dynamic_set: bool,
@@ -375,6 +381,8 @@ def _convert_and_collect_outputs(
             font_path=font_path,
             grayscale_mode=grayscale_mode,
             dither=dither,
+            cell_width=int(cell_width),
+            cell_height=int(cell_height),
             base_name=base,
         )
 
@@ -443,6 +451,24 @@ def run_app() -> None:
             else 0,
             help="Error-diffusion dithering for smoother gradients (slower).",
         )
+
+        with st.expander("Advanced", expanded=False):
+            cell_width = st.number_input(
+                "Cell width (px)",
+                min_value=1,
+                max_value=200,
+                value=int(cfg.get("cell_width", DEFAULTS["cell_width"])),
+                step=1,
+                help="Character cell width in pixels (image output + aspect correction).",
+            )
+            cell_height = st.number_input(
+                "Cell height (px)",
+                min_value=1,
+                max_value=200,
+                value=int(cfg.get("cell_height", DEFAULTS["cell_height"])),
+                step=1,
+                help="Character cell height in pixels (image output + aspect correction).",
+            )
         output_format = st.selectbox(
             "Output format",
             ["image", "text", "html"],
@@ -489,6 +515,8 @@ def run_app() -> None:
                 "brightness": brightness,
                 "grayscale": grayscale_mode,
                 "dither": dither,
+                "cell_width": int(cell_width),
+                "cell_height": int(cell_height),
                 "format": output_format,
                 "dynamic_set": dynamic_set,
                 "output_dir": output_dir,
@@ -537,6 +565,8 @@ def run_app() -> None:
                         brightness=brightness,
                         grayscale_mode=grayscale_mode,
                         dither=dither,
+                        cell_width=int(cell_width),
+                        cell_height=int(cell_height),
                         dynamic_set=dynamic_set,
                         font_path=font_path,
                         progress_cb=_progress_cb,
@@ -556,6 +586,8 @@ def run_app() -> None:
                         brightness=brightness,
                         grayscale_mode=grayscale_mode,
                         dither=dither,
+                        cell_width=int(cell_width),
+                        cell_height=int(cell_height),
                         output_format=output_format,
                         output_dir=output_dir,
                         dynamic_set=dynamic_set,
@@ -698,9 +730,7 @@ def run_app() -> None:
             def _ensure_font(self) -> None:
                 if font_path:
                     try:
-                        self._font = ImageFont.truetype(
-                            font_path, converter.ONE_CHAR_HEIGHT
-                        )
+                        self._font = ImageFont.truetype(font_path, int(cell_height))
                     except OSError:
                         self._font = ImageFont.load_default()
                 else:
@@ -760,6 +790,8 @@ def run_app() -> None:
                     font_path=font_path,
                     grayscale_mode=grayscale_mode,
                     dither=dither,
+                    cell_width=int(cell_width),
+                    cell_height=int(cell_height),
                     font=self._font,
                     char_map=self._char_map,
                 )

@@ -25,6 +25,8 @@ def test_parse_args_defaults():
     assert args.font is None
     assert args.grayscale is None
     assert args.dither is None
+    assert args.cell_width is None
+    assert args.cell_height is None
 
 
 def test_parse_args_grayscale_flag():
@@ -35,6 +37,12 @@ def test_parse_args_grayscale_flag():
 def test_parse_args_dither_flag():
     args = ascii_mod.parse_args(["--dither", "floyd-steinberg"])
     assert args.dither == "floyd-steinberg"
+
+
+def test_parse_args_cell_size_flags():
+    args = ascii_mod.parse_args(["--cell-width", "8", "--cell-height", "16"])
+    assert args.cell_width == 8
+    assert args.cell_height == 16
 
 
 def test_convert_image_dither_floyd_steinberg_tiny_gradient(tmp_path):
@@ -96,6 +104,28 @@ def test_convert_image_dither_atkinson_tiny_gradient(tmp_path):
     finally:
         conv.char_array = original
         conv._recompute_interval()
+
+
+def test_convert_image_cell_size_affects_aspect(tmp_path):
+    img = Image.new("RGB", (2, 4), color=(255, 255, 255))
+    test_path = tmp_path / "aspect.png"
+    img.save(test_path)
+    out_dir = tmp_path / "out"
+
+    ascii_mod.convert_image(
+        test_path,
+        scale_factor=1.0,
+        bg_brightness=0,
+        output_dir=out_dir,
+        output_format="text",
+        cell_width=1,
+        cell_height=1,
+    )
+
+    out_file = out_dir / f"O_h_0_f_1.0_{test_path.stem}.txt"
+    lines = out_file.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 4
+    assert all(len(line) == 2 for line in lines)
 
 
 def test_parse_args_ansi_format():
