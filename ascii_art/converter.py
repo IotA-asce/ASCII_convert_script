@@ -1,13 +1,16 @@
 import html
 import os
 import sys
-import math
 from pathlib import Path
 from typing import Any, Callable
 
 from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
 from .charset import generate_char_array
+
+
+# Pillow changed resampling constants to an enum; use getattr for compatibility.
+_RESAMPLE_NEAREST = getattr(getattr(Image, "Resampling", Image), "NEAREST")
 
 try:
     from tqdm import tqdm
@@ -276,9 +279,12 @@ char_array = [
 
 
 def _recompute_interval():
-    global CHAR_LENGTH, INTERVAL
+    global CHAR_LENGTH, INTERVAL, CHAR_LUT
     CHAR_LENGTH = len(char_array)
     INTERVAL = CHAR_LENGTH / 256
+    # Map grayscale values [0..255] directly to a character.
+    # Using integer math avoids per-pixel floating point work.
+    CHAR_LUT = tuple(char_array[(i * CHAR_LENGTH) // 256] for i in range(256))
 
 
 _recompute_interval()
@@ -336,7 +342,11 @@ def get_char(input_int: int) -> str:
     Returns:
         A character (string) from the `char_array` list
     """
-    return char_array[math.floor(input_int * INTERVAL)]
+    if input_int <= 0:
+        return CHAR_LUT[0]
+    if input_int >= 255:
+        return CHAR_LUT[255]
+    return CHAR_LUT[input_int]
 
 
 def list_files_from_assets():
@@ -438,7 +448,9 @@ def convert_image(
             print(f"Input file '{name}' not found")
             raise
 
-    def _load_font(user_font: str | None) -> ImageFont.ImageFont:
+    def _load_font(
+        user_font: str | None,
+    ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         windows_font = r"C:\\Windows\\Fonts\\lucon.ttf"
         linux_font = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
         if user_font:
@@ -461,21 +473,26 @@ def convert_image(
 
     fnt = _load_font(font_path)
 
-    frames = [_im]
-    if getattr(_im, "is_animated", False):
-        frames = [frame.copy() for frame in ImageSequence.Iterator(_im)]
+    is_animated = getattr(_im, "is_animated", False)
+    n_frames = int(getattr(_im, "n_frames", 1)) if is_animated else 1
+    frames_iter = ImageSequence.Iterator(_im) if is_animated else (_im,)
 
-    for frame_index, frame in enumerate(frames):
+    for frame_index, frame in enumerate(frames_iter):
+        if is_animated:
+            frame = frame.copy()
         width, height = frame.size
         frame = frame.resize(
             (
                 max(1, int(scale_factor * width)),
                 max(1, int(scale_factor * height * (ONE_CHAR_WIDTH / ONE_CHAR_HEIGHT))),
             ),
-            Image.NEAREST,
+            _RESAMPLE_NEAREST,
         )
         width, height = frame.size
-        pix = frame.load()
+        frame_rgb = frame.convert("RGB")
+        rgb_bytes = memoryview(frame_rgb.tobytes())
+        stride = width * 3
+        lut = CHAR_LUT
 
         output_image = None
         draw = None
@@ -487,79 +504,144 @@ def convert_image(
             )
             draw = ImageDraw.Draw(output_image)
 
-        ascii_lines: list[Any] = []
-        collect_lines = output_format in ("text", "html", "ansi")
+        text_lines: list[str] | None = None
+        html_lines: list[str] | None = None
+        ansi_lines: list[str] | None = None
+        if output_format == "text":
+            text_lines = []
+        elif output_format == "html":
+            html_lines = []
+        elif output_format == "ansi":
+            ansi_lines = []
 
         progress = (
             None
             if progress_callback
             else loader(
-                total=height * width,
-                desc=f"Frame {frame_index + 1}/{len(frames)}"
-                if len(frames) > 1
-                else "Pixels",
+                total=height,
+                desc=f"Frame {frame_index + 1}/{n_frames}" if n_frames > 1 else "Rows",
             )
         )
         if progress_callback:
             progress_callback(0, height)
-        for i in range(height):
-            line: list[Any] = []
-            for j in range(width):
-                if progress:
-                    progress.update(1)
-                _r, _g, _b = pix[j, i]
-                _h = int(_r / 3 + _g / 3 + _b / 3)
-                pix[j, i] = (_h, _h, _h)
-                ch = get_char(_h)
-                if output_format == "image":
-                    assert draw is not None
-                    color = (_h, _h, _h) if mono else (_r, _g, _b)
+        if output_format == "image":
+            assert draw is not None
+            x_positions = [x * ONE_CHAR_WIDTH for x in range(width)]
+            for y in range(height):
+                row = rgb_bytes[y * stride : (y + 1) * stride]
+                y_pos = y * ONE_CHAR_HEIGHT
+                off = 0
+                for x in range(width):
+                    r = row[off]
+                    g = row[off + 1]
+                    b = row[off + 2]
+                    off += 3
+                    h = (r + g + b) // 3
+                    ch = lut[h]
+                    color = (h, h, h) if mono else (r, g, b)
                     draw.text(
-                        (j * ONE_CHAR_WIDTH, i * ONE_CHAR_HEIGHT),
+                        (x_positions[x], y_pos),
                         ch,
                         font=fnt,
                         fill=color,
                     )
-                elif output_format == "text":
-                    line.append(ch)
-                elif output_format == "html":
-                    color = (_h, _h, _h) if mono else (_r, _g, _b)
-                    line.append((ch, color))
-                elif output_format == "ansi":
+                if progress:
+                    progress.update(1)
+                if progress_callback:
+                    progress_callback(y + 1, height)
+        elif output_format == "text":
+            assert text_lines is not None
+            for y in range(height):
+                row = rgb_bytes[y * stride : (y + 1) * stride]
+                line_chars: list[str] = []
+                off = 0
+                for _ in range(width):
+                    r = row[off]
+                    g = row[off + 1]
+                    b = row[off + 2]
+                    off += 3
+                    h = (r + g + b) // 3
+                    line_chars.append(lut[h])
+                text_lines.append("".join(line_chars))
+                if progress:
+                    progress.update(1)
+                if progress_callback:
+                    progress_callback(y + 1, height)
+        elif output_format == "html":
+            assert html_lines is not None
+            for y in range(height):
+                row = rgb_bytes[y * stride : (y + 1) * stride]
+                parts: list[str] = []
+                off = 0
+                for _ in range(width):
+                    r = row[off]
+                    g = row[off + 1]
+                    b = row[off + 2]
+                    off += 3
+                    h = (r + g + b) // 3
+                    ch = lut[h]
                     if mono:
-                        line.append(f"\x1b[38;2;{_h};{_h};{_h}m{ch}")
+                        cr = cg = cb = h
                     else:
-                        line.append(f"\x1b[38;2;{_r};{_g};{_b}m{ch}")
-            if collect_lines:
-                ascii_lines.append(line)
-            if progress_callback:
-                progress_callback(i + 1, height)
+                        cr, cg, cb = r, g, b
+                    parts.append(
+                        f'<span style="color:rgb({cr},{cg},{cb})">{html.escape(ch)}</span>'
+                    )
+                html_lines.append("".join(parts))
+                if progress:
+                    progress.update(1)
+                if progress_callback:
+                    progress_callback(y + 1, height)
+        elif output_format == "ansi":
+            assert ansi_lines is not None
+            for y in range(height):
+                row = rgb_bytes[y * stride : (y + 1) * stride]
+                parts: list[str] = []
+                off = 0
+                if mono:
+                    for _ in range(width):
+                        r = row[off]
+                        g = row[off + 1]
+                        b = row[off + 2]
+                        off += 3
+                        h = (r + g + b) // 3
+                        ch = lut[h]
+                        parts.append(f"\x1b[38;2;{h};{h};{h}m{ch}")
+                else:
+                    for _ in range(width):
+                        r = row[off]
+                        g = row[off + 1]
+                        b = row[off + 2]
+                        off += 3
+                        h = (r + g + b) // 3
+                        ch = lut[h]
+                        parts.append(f"\x1b[38;2;{r};{g};{b}m{ch}")
+                ansi_lines.append("".join(parts))
+                if progress:
+                    progress.update(1)
+                if progress_callback:
+                    progress_callback(y + 1, height)
         if progress:
             progress.close()
 
         if output_format != "ansi":
             os.makedirs(output_dir, exist_ok=True)
             file_stem = f"O_h_{bg_brightness}_f_{scale_factor}_{base_name}"
-            if len(frames) > 1:
+            if n_frames > 1:
                 file_stem += f"_{frame_index}"
 
             if output_format == "image":
                 assert output_image is not None
                 output_image.save(os.path.join(output_dir, file_stem + ".png"))
             elif output_format == "text":
-                lines = ["".join(l) for l in ascii_lines]
+                assert text_lines is not None
+                lines = text_lines
                 with open(
                     os.path.join(output_dir, file_stem + ".txt"), "w", encoding="utf-8"
                 ) as fh:
                     fh.write("\n".join(lines))
             elif output_format == "html":
-                html_lines = []
-                for line in ascii_lines:
-                    html_line = "".join(
-                        f'<span style="color:rgb({r},{g},{b})">{html.escape(ch)}</span>'
-                        for ch, (r, g, b) in line
-                    )
-                    html_lines.append(html_line)
+                assert html_lines is not None
                 html_content = "<br>\n".join(html_lines)
                 page = (
                     f"<html><body style='background-color:rgb({bg_brightness},{bg_brightness},{bg_brightness});'>"
@@ -570,9 +652,10 @@ def convert_image(
                 ) as fh:
                     fh.write(page)
         else:
+            assert ansi_lines is not None
             sys.stdout.write("\n")
-            for line in ascii_lines:
-                sys.stdout.write("".join(line) + "\x1b[0m\n")
+            for line in ansi_lines:
+                sys.stdout.write(line + "\x1b[0m\n")
 
 
 def convert_video(
