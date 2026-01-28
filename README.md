@@ -65,6 +65,9 @@ Rendering
   - `avg` -> 85
   - `luma601` -> 76
   - `luma709` -> 53
+- `--dither {none,floyd-steinberg,atkinson}`: optional error-diffusion dithering
+  applied to brightness before character selection (default: `none`).
+  - Use it for smoother gradients; it is slower.
 
 Character set / fonts
 - `--dynamic-set`: generate a brightness-ranked character set via `ascii_art.charset`.
@@ -179,6 +182,11 @@ Grayscale mode (select)
   - `luma601`: closer to perceived brightness (BT.601)
   - `luma709`: closer to perceived brightness (BT.709)
 - Example for a pure red pixel `(255,0,0)`: `avg=85`, `luma601=76`, `luma709=53`.
+
+Dither (select)
+- What it does: applies error-diffusion dithering to reduce banding in smooth
+  gradients (slower).
+- Options: `none` (default), `floyd-steinberg`, `atkinson`.
 
 Dynamic character set (checkbox)
 - What it does: generates a brightness-ranked character set using

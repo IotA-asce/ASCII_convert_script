@@ -24,11 +24,78 @@ def test_parse_args_defaults():
     assert args.mono is False
     assert args.font is None
     assert args.grayscale is None
+    assert args.dither is None
 
 
 def test_parse_args_grayscale_flag():
     args = ascii_mod.parse_args(["--grayscale", "luma601"])
     assert args.grayscale == "luma601"
+
+
+def test_parse_args_dither_flag():
+    args = ascii_mod.parse_args(["--dither", "floyd-steinberg"])
+    assert args.dither == "floyd-steinberg"
+
+
+def test_convert_image_dither_floyd_steinberg_tiny_gradient(tmp_path):
+    import ascii_art.converter as conv
+
+    original = list(conv.char_array)
+    try:
+        conv.char_array = [" ", "#"]
+        conv._recompute_interval()
+
+        # Use a 2x4 input so the converter's aspect correction produces a 2x2 output.
+        img = Image.new("RGB", (2, 4), color=(128, 128, 128))
+        test_path = tmp_path / "midgray.png"
+        img.save(test_path)
+        out_dir = tmp_path / "out"
+
+        ascii_mod.convert_image(
+            test_path,
+            scale_factor=1.0,
+            bg_brightness=0,
+            output_dir=out_dir,
+            output_format="text",
+            dither="floyd-steinberg",
+        )
+
+        out_file = out_dir / f"O_h_0_f_1.0_{test_path.stem}.txt"
+        content = out_file.read_text(encoding="utf-8")
+        assert content == "# \n #"
+    finally:
+        conv.char_array = original
+        conv._recompute_interval()
+
+
+def test_convert_image_dither_atkinson_tiny_gradient(tmp_path):
+    import ascii_art.converter as conv
+
+    original = list(conv.char_array)
+    try:
+        conv.char_array = [" ", "#"]
+        conv._recompute_interval()
+
+        img = Image.new("RGB", (2, 4), color=(128, 128, 128))
+        test_path = tmp_path / "midgray_atkinson.png"
+        img.save(test_path)
+        out_dir = tmp_path / "out"
+
+        ascii_mod.convert_image(
+            test_path,
+            scale_factor=1.0,
+            bg_brightness=0,
+            output_dir=out_dir,
+            output_format="text",
+            dither="atkinson",
+        )
+
+        out_file = out_dir / f"O_h_0_f_1.0_{test_path.stem}.txt"
+        content = out_file.read_text(encoding="utf-8")
+        assert content == "# \n #"
+    finally:
+        conv.char_array = original
+        conv._recompute_interval()
 
 
 def test_parse_args_ansi_format():

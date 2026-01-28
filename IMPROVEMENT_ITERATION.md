@@ -10,10 +10,10 @@ Each section is a self-contained checklist.
 - [x] Add unit tests that lock down expected mapping for each mode
 
 ## 2) Optional dithering (quality feature)
-- [ ] Add `--dither {none,floyd-steinberg,atkinson}` (GUI toggle)
-- [ ] Keep it off by default
-- [ ] Add deterministic tests on a tiny synthetic gradient
-- [ ] Document best use cases (gradients, low-contrast scenes)
+- [x] Add `--dither {none,floyd-steinberg,atkinson}` (GUI toggle)
+- [x] Keep it off by default
+- [x] Add deterministic tests on a tiny synthetic gradient
+- [x] Document best use cases (gradients, low-contrast scenes)
 
 ## 3) Configurable character cell size (feature)
 - [ ] Add `--cell-width` and `--cell-height` (defaults 10x18)

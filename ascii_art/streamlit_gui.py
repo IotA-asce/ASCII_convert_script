@@ -43,6 +43,7 @@ DEFAULTS: dict[str, Any] = {
     "scale": 0.2,
     "brightness": 30,
     "grayscale": "avg",
+    "dither": "none",
     "format": "image",
     "dynamic_set": False,
     "output_dir": "./assets/output",
@@ -129,6 +130,7 @@ def _ansi_preview(
     scale: float,
     brightness: int,
     grayscale_mode: str,
+    dither: str,
     dynamic_set: bool,
     font_path: str | None,
     progress_cb,
@@ -145,6 +147,7 @@ def _ansi_preview(
             mono=True,
             font_path=font_path,
             grayscale_mode=grayscale_mode,
+            dither=dither,
             progress_callback=progress_cb,
             base_name="preview",
         )
@@ -181,6 +184,7 @@ def _render_ascii_image(
     mono: bool,
     font_path: str | None,
     grayscale_mode: str,
+    dither: str,
     font: ImageFont.ImageFont | None = None,
     char_map: list[str] | None = None,
 ) -> Image.Image:
@@ -238,15 +242,102 @@ def _render_ascii_image(
         else:
             wr, wg, wb = 54, 183, 19
 
+    if dither not in ("none", "floyd-steinberg", "atkinson"):
+        dither = "none"
+
+    levels = len(converter.char_array)
+    levels_m1 = max(1, levels - 1)
+
+    if dither == "none":
+        for y in range(new_h):
+            for x in range(new_w):
+                r, g, b = pix[x, y]
+                if is_avg:
+                    h = (r + g + b) // 3
+                else:
+                    h = (wr * r + wg * g + wb * b) >> 8
+                ch = char_map[h]
+                color = (h, h, h) if mono else (r, g, b)
+                draw.text(
+                    (x * converter.ONE_CHAR_WIDTH, y * converter.ONE_CHAR_HEIGHT),
+                    ch,
+                    font=font,
+                    fill=color,
+                )
+        return out
+
+    if dither == "floyd-steinberg":
+        err_curr = [0.0] * (new_w + 2)
+        err_next = [0.0] * (new_w + 2)
+        for y in range(new_h):
+            err_curr, err_next = err_next, [0.0] * (new_w + 2)
+            for x in range(new_w):
+                r, g, b = pix[x, y]
+                base = (r + g + b) // 3 if is_avg else (wr * r + wg * g + wb * b) >> 8
+                v = float(base) + err_curr[x + 1]
+                if v < 0.0:
+                    v = 0.0
+                elif v > 255.0:
+                    v = 255.0
+                if levels_m1 <= 0:
+                    qh = 0
+                else:
+                    idx = int(v * levels_m1 / 255.0 + 0.5)
+                    if idx < 0:
+                        idx = 0
+                    elif idx > levels_m1:
+                        idx = levels_m1
+                    qh = int(idx * 255.0 / levels_m1 + 0.5)
+                err = v - float(qh)
+                err_curr[x + 2] += err * (7.0 / 16.0)
+                err_next[x + 0] += err * (3.0 / 16.0)
+                err_next[x + 1] += err * (5.0 / 16.0)
+                err_next[x + 2] += err * (1.0 / 16.0)
+
+                ch = char_map[qh]
+                color = (qh, qh, qh) if mono else (r, g, b)
+                draw.text(
+                    (x * converter.ONE_CHAR_WIDTH, y * converter.ONE_CHAR_HEIGHT),
+                    ch,
+                    font=font,
+                    fill=color,
+                )
+        return out
+
+    # atkinson
+    err_curr = [0.0] * (new_w + 4)
+    err_next = [0.0] * (new_w + 4)
+    err_next2 = [0.0] * (new_w + 4)
     for y in range(new_h):
+        err_curr, err_next, err_next2 = err_next, err_next2, [0.0] * (new_w + 4)
         for x in range(new_w):
             r, g, b = pix[x, y]
-            if is_avg:
-                h = (r + g + b) // 3
+            base = (r + g + b) // 3 if is_avg else (wr * r + wg * g + wb * b) >> 8
+            idx0 = x + 2
+            v = float(base) + err_curr[idx0]
+            if v < 0.0:
+                v = 0.0
+            elif v > 255.0:
+                v = 255.0
+            if levels_m1 <= 0:
+                qh = 0
             else:
-                h = (wr * r + wg * g + wb * b) >> 8
-            ch = char_map[h]
-            color = (h, h, h) if mono else (r, g, b)
+                qidx = int(v * levels_m1 / 255.0 + 0.5)
+                if qidx < 0:
+                    qidx = 0
+                elif qidx > levels_m1:
+                    qidx = levels_m1
+                qh = int(qidx * 255.0 / levels_m1 + 0.5)
+            err = (v - float(qh)) / 8.0
+            err_curr[idx0 + 1] += err
+            err_curr[idx0 + 2] += err
+            err_next[idx0 - 1] += err
+            err_next[idx0 + 0] += err
+            err_next[idx0 + 1] += err
+            err_next2[idx0 + 0] += err
+
+            ch = char_map[qh]
+            color = (qh, qh, qh) if mono else (r, g, b)
             draw.text(
                 (x * converter.ONE_CHAR_WIDTH, y * converter.ONE_CHAR_HEIGHT),
                 ch,
@@ -263,6 +354,7 @@ def _convert_and_collect_outputs(
     scale: float,
     brightness: int,
     grayscale_mode: str,
+    dither: str,
     output_format: str,
     output_dir: str,
     dynamic_set: bool,
@@ -282,6 +374,7 @@ def _convert_and_collect_outputs(
             mono=False,
             font_path=font_path,
             grayscale_mode=grayscale_mode,
+            dither=dither,
             base_name=base,
         )
 
@@ -338,6 +431,18 @@ def run_app() -> None:
             else 0,
             help="Controls brightness mapping for character selection.",
         )
+
+        dither = st.selectbox(
+            "Dither",
+            ["none", "floyd-steinberg", "atkinson"],
+            index=["none", "floyd-steinberg", "atkinson"].index(
+                str(cfg.get("dither", DEFAULTS["dither"]))
+            )
+            if str(cfg.get("dither", DEFAULTS["dither"]))
+            in ("none", "floyd-steinberg", "atkinson")
+            else 0,
+            help="Error-diffusion dithering for smoother gradients (slower).",
+        )
         output_format = st.selectbox(
             "Output format",
             ["image", "text", "html"],
@@ -383,6 +488,7 @@ def run_app() -> None:
                 "scale": scale,
                 "brightness": brightness,
                 "grayscale": grayscale_mode,
+                "dither": dither,
                 "format": output_format,
                 "dynamic_set": dynamic_set,
                 "output_dir": output_dir,
@@ -430,6 +536,7 @@ def run_app() -> None:
                         scale=scale,
                         brightness=brightness,
                         grayscale_mode=grayscale_mode,
+                        dither=dither,
                         dynamic_set=dynamic_set,
                         font_path=font_path,
                         progress_cb=_progress_cb,
@@ -448,6 +555,7 @@ def run_app() -> None:
                         scale=scale,
                         brightness=brightness,
                         grayscale_mode=grayscale_mode,
+                        dither=dither,
                         output_format=output_format,
                         output_dir=output_dir,
                         dynamic_set=dynamic_set,
@@ -651,6 +759,7 @@ def run_app() -> None:
                     mono=bool(live_mono),
                     font_path=font_path,
                     grayscale_mode=grayscale_mode,
+                    dither=dither,
                     font=self._font,
                     char_map=self._char_map,
                 )

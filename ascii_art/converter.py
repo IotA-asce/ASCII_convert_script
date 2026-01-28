@@ -400,6 +400,7 @@ def convert_image(
     mono: bool = False,
     font_path: str | None = None,
     grayscale_mode: str = "avg",
+    dither: str = "none",
     progress_callback: Callable[[int, int], None] | None = None,
 ) -> None:
     """
@@ -424,6 +425,9 @@ def convert_image(
             - `avg`: average of channels (current behavior)
             - `luma601`: BT.601 luma (integer approximation)
             - `luma709`: BT.709 luma (integer approximation)
+        dither (str): Optional error-diffusion dithering applied to brightness
+            before character selection. One of: `none`, `floyd-steinberg`,
+            `atkinson`.
         progress_callback (callable, optional): Callback invoked as
             ``progress_callback(current, total)`` to report the number of
             processed rows.
@@ -482,6 +486,9 @@ def convert_image(
     if grayscale_mode not in ("avg", "luma601", "luma709"):
         raise ValueError("grayscale_mode must be one of: avg, luma601, luma709")
 
+    if dither not in ("none", "floyd-steinberg", "atkinson"):
+        raise ValueError("dither must be one of: none, floyd-steinberg, atkinson")
+
     is_animated = getattr(_im, "is_animated", False)
     n_frames = int(getattr(_im, "n_frames", 1)) if is_animated else 1
     frames_iter = ImageSequence.Iterator(_im) if is_animated else (_im,)
@@ -510,6 +517,9 @@ def convert_image(
                 wr, wg, wb = 77, 150, 29
             else:  # luma709
                 wr, wg, wb = 54, 183, 19
+
+        levels = CHAR_LENGTH
+        levels_m1 = max(1, levels - 1)
 
         output_image = None
         draw = None
@@ -544,19 +554,93 @@ def convert_image(
         if output_format == "image":
             assert draw is not None
             x_positions = [x * ONE_CHAR_WIDTH for x in range(width)]
-            if is_avg:
+            if dither == "none":
+                if is_avg:
+                    for y in range(height):
+                        row = rgb_bytes[y * stride : (y + 1) * stride]
+                        y_pos = y * ONE_CHAR_HEIGHT
+                        off = 0
+                        for x in range(width):
+                            r = row[off]
+                            g = row[off + 1]
+                            b = row[off + 2]
+                            off += 3
+                            h = (r + g + b) // 3
+                            ch = lut[h]
+                            color = (h, h, h) if mono else (r, g, b)
+                            draw.text(
+                                (x_positions[x], y_pos),
+                                ch,
+                                font=fnt,
+                                fill=color,
+                            )
+                        if progress:
+                            progress.update(1)
+                        if progress_callback:
+                            progress_callback(y + 1, height)
+                else:
+                    for y in range(height):
+                        row = rgb_bytes[y * stride : (y + 1) * stride]
+                        y_pos = y * ONE_CHAR_HEIGHT
+                        off = 0
+                        for x in range(width):
+                            r = row[off]
+                            g = row[off + 1]
+                            b = row[off + 2]
+                            off += 3
+                            h = (wr * r + wg * g + wb * b) >> 8
+                            ch = lut[h]
+                            color = (h, h, h) if mono else (r, g, b)
+                            draw.text(
+                                (x_positions[x], y_pos),
+                                ch,
+                                font=fnt,
+                                fill=color,
+                            )
+                        if progress:
+                            progress.update(1)
+                        if progress_callback:
+                            progress_callback(y + 1, height)
+            elif dither == "floyd-steinberg":
+                err_curr = [0.0] * (width + 2)
+                err_next = [0.0] * (width + 2)
                 for y in range(height):
                     row = rgb_bytes[y * stride : (y + 1) * stride]
                     y_pos = y * ONE_CHAR_HEIGHT
+                    err_curr, err_next = err_next, [0.0] * (width + 2)
                     off = 0
                     for x in range(width):
                         r = row[off]
                         g = row[off + 1]
                         b = row[off + 2]
                         off += 3
-                        h = (r + g + b) // 3
-                        ch = lut[h]
-                        color = (h, h, h) if mono else (r, g, b)
+                        base = (
+                            (r + g + b) // 3
+                            if is_avg
+                            else (wr * r + wg * g + wb * b) >> 8
+                        )
+                        v = float(base) + err_curr[x + 1]
+                        if v < 0.0:
+                            v = 0.0
+                        elif v > 255.0:
+                            v = 255.0
+                        if levels_m1 <= 0:
+                            qh = 0
+                        else:
+                            idx = int(v * levels_m1 / 255.0 + 0.5)
+                            if idx < 0:
+                                idx = 0
+                            elif idx > levels_m1:
+                                idx = levels_m1
+                            qh = int(idx * 255.0 / levels_m1 + 0.5)
+                        err = v - float(qh)
+                        err_curr[x + 2] += err * (7.0 / 16.0)
+                        err_next[x + 0] += err * (3.0 / 16.0)
+                        err_next[x + 1] += err * (5.0 / 16.0)
+                        err_next[x + 2] += err * (1.0 / 16.0)
+
+                        ch = lut[qh]
+                        color = (qh, qh, qh) if mono else (r, g, b)
                         draw.text(
                             (x_positions[x], y_pos),
                             ch,
@@ -567,19 +651,54 @@ def convert_image(
                         progress.update(1)
                     if progress_callback:
                         progress_callback(y + 1, height)
-            else:
+            else:  # atkinson
+                err_curr = [0.0] * (width + 4)
+                err_next = [0.0] * (width + 4)
+                err_next2 = [0.0] * (width + 4)
                 for y in range(height):
                     row = rgb_bytes[y * stride : (y + 1) * stride]
                     y_pos = y * ONE_CHAR_HEIGHT
+                    err_curr, err_next, err_next2 = (
+                        err_next,
+                        err_next2,
+                        [0.0] * (width + 4),
+                    )
                     off = 0
                     for x in range(width):
                         r = row[off]
                         g = row[off + 1]
                         b = row[off + 2]
                         off += 3
-                        h = (wr * r + wg * g + wb * b) >> 8
-                        ch = lut[h]
-                        color = (h, h, h) if mono else (r, g, b)
+                        base = (
+                            (r + g + b) // 3
+                            if is_avg
+                            else (wr * r + wg * g + wb * b) >> 8
+                        )
+                        idx0 = x + 2
+                        v = float(base) + err_curr[idx0]
+                        if v < 0.0:
+                            v = 0.0
+                        elif v > 255.0:
+                            v = 255.0
+                        if levels_m1 <= 0:
+                            qh = 0
+                        else:
+                            qidx = int(v * levels_m1 / 255.0 + 0.5)
+                            if qidx < 0:
+                                qidx = 0
+                            elif qidx > levels_m1:
+                                qidx = levels_m1
+                            qh = int(qidx * 255.0 / levels_m1 + 0.5)
+                        err = (v - float(qh)) / 8.0
+                        err_curr[idx0 + 1] += err
+                        err_curr[idx0 + 2] += err
+                        err_next[idx0 - 1] += err
+                        err_next[idx0 + 0] += err
+                        err_next[idx0 + 1] += err
+                        err_next2[idx0 + 0] += err
+
+                        ch = lut[qh]
+                        color = (qh, qh, qh) if mono else (r, g, b)
                         draw.text(
                             (x_positions[x], y_pos),
                             ch,
@@ -592,35 +711,130 @@ def convert_image(
                         progress_callback(y + 1, height)
         elif output_format == "text":
             assert text_lines is not None
-            if is_avg:
+            if dither == "none":
+                if is_avg:
+                    for y in range(height):
+                        row = rgb_bytes[y * stride : (y + 1) * stride]
+                        line_chars: list[str] = []
+                        off = 0
+                        for _ in range(width):
+                            r = row[off]
+                            g = row[off + 1]
+                            b = row[off + 2]
+                            off += 3
+                            h = (r + g + b) // 3
+                            line_chars.append(lut[h])
+                        text_lines.append("".join(line_chars))
+                        if progress:
+                            progress.update(1)
+                        if progress_callback:
+                            progress_callback(y + 1, height)
+                else:
+                    for y in range(height):
+                        row = rgb_bytes[y * stride : (y + 1) * stride]
+                        line_chars: list[str] = []
+                        off = 0
+                        for _ in range(width):
+                            r = row[off]
+                            g = row[off + 1]
+                            b = row[off + 2]
+                            off += 3
+                            h = (wr * r + wg * g + wb * b) >> 8
+                            line_chars.append(lut[h])
+                        text_lines.append("".join(line_chars))
+                        if progress:
+                            progress.update(1)
+                        if progress_callback:
+                            progress_callback(y + 1, height)
+            elif dither == "floyd-steinberg":
+                err_curr = [0.0] * (width + 2)
+                err_next = [0.0] * (width + 2)
                 for y in range(height):
                     row = rgb_bytes[y * stride : (y + 1) * stride]
+                    err_curr, err_next = err_next, [0.0] * (width + 2)
                     line_chars: list[str] = []
                     off = 0
-                    for _ in range(width):
+                    for x in range(width):
                         r = row[off]
                         g = row[off + 1]
                         b = row[off + 2]
                         off += 3
-                        h = (r + g + b) // 3
-                        line_chars.append(lut[h])
+                        base = (
+                            (r + g + b) // 3
+                            if is_avg
+                            else (wr * r + wg * g + wb * b) >> 8
+                        )
+                        v = float(base) + err_curr[x + 1]
+                        if v < 0.0:
+                            v = 0.0
+                        elif v > 255.0:
+                            v = 255.0
+                        if levels_m1 <= 0:
+                            qh = 0
+                        else:
+                            idx = int(v * levels_m1 / 255.0 + 0.5)
+                            if idx < 0:
+                                idx = 0
+                            elif idx > levels_m1:
+                                idx = levels_m1
+                            qh = int(idx * 255.0 / levels_m1 + 0.5)
+                        err = v - float(qh)
+                        err_curr[x + 2] += err * (7.0 / 16.0)
+                        err_next[x + 0] += err * (3.0 / 16.0)
+                        err_next[x + 1] += err * (5.0 / 16.0)
+                        err_next[x + 2] += err * (1.0 / 16.0)
+                        line_chars.append(lut[qh])
                     text_lines.append("".join(line_chars))
                     if progress:
                         progress.update(1)
                     if progress_callback:
                         progress_callback(y + 1, height)
-            else:
+            else:  # atkinson
+                err_curr = [0.0] * (width + 4)
+                err_next = [0.0] * (width + 4)
+                err_next2 = [0.0] * (width + 4)
                 for y in range(height):
                     row = rgb_bytes[y * stride : (y + 1) * stride]
-                    line_chars: list[str] = []
+                    err_curr, err_next, err_next2 = (
+                        err_next,
+                        err_next2,
+                        [0.0] * (width + 4),
+                    )
+                    line_chars = []
                     off = 0
-                    for _ in range(width):
+                    for x in range(width):
                         r = row[off]
                         g = row[off + 1]
                         b = row[off + 2]
                         off += 3
-                        h = (wr * r + wg * g + wb * b) >> 8
-                        line_chars.append(lut[h])
+                        base = (
+                            (r + g + b) // 3
+                            if is_avg
+                            else (wr * r + wg * g + wb * b) >> 8
+                        )
+                        idx0 = x + 2
+                        v = float(base) + err_curr[idx0]
+                        if v < 0.0:
+                            v = 0.0
+                        elif v > 255.0:
+                            v = 255.0
+                        if levels_m1 <= 0:
+                            qh = 0
+                        else:
+                            qidx = int(v * levels_m1 / 255.0 + 0.5)
+                            if qidx < 0:
+                                qidx = 0
+                            elif qidx > levels_m1:
+                                qidx = levels_m1
+                            qh = int(qidx * 255.0 / levels_m1 + 0.5)
+                        err = (v - float(qh)) / 8.0
+                        err_curr[idx0 + 1] += err
+                        err_curr[idx0 + 2] += err
+                        err_next[idx0 - 1] += err
+                        err_next[idx0 + 0] += err
+                        err_next[idx0 + 1] += err
+                        err_next2[idx0 + 0] += err
+                        line_chars.append(lut[qh])
                     text_lines.append("".join(line_chars))
                     if progress:
                         progress.update(1)
@@ -628,20 +842,96 @@ def convert_image(
                         progress_callback(y + 1, height)
         elif output_format == "html":
             assert html_lines is not None
-            if is_avg:
+            if dither == "none":
+                if is_avg:
+                    for y in range(height):
+                        row = rgb_bytes[y * stride : (y + 1) * stride]
+                        parts: list[str] = []
+                        off = 0
+                        for _ in range(width):
+                            r = row[off]
+                            g = row[off + 1]
+                            b = row[off + 2]
+                            off += 3
+                            h = (r + g + b) // 3
+                            ch = lut[h]
+                            if mono:
+                                cr = cg = cb = h
+                            else:
+                                cr, cg, cb = r, g, b
+                            parts.append(
+                                f'<span style="color:rgb({cr},{cg},{cb})">{html.escape(ch)}</span>'
+                            )
+                        html_lines.append("".join(parts))
+                        if progress:
+                            progress.update(1)
+                        if progress_callback:
+                            progress_callback(y + 1, height)
+                else:
+                    for y in range(height):
+                        row = rgb_bytes[y * stride : (y + 1) * stride]
+                        parts: list[str] = []
+                        off = 0
+                        for _ in range(width):
+                            r = row[off]
+                            g = row[off + 1]
+                            b = row[off + 2]
+                            off += 3
+                            h = (wr * r + wg * g + wb * b) >> 8
+                            ch = lut[h]
+                            if mono:
+                                cr = cg = cb = h
+                            else:
+                                cr, cg, cb = r, g, b
+                            parts.append(
+                                f'<span style="color:rgb({cr},{cg},{cb})">{html.escape(ch)}</span>'
+                            )
+                        html_lines.append("".join(parts))
+                        if progress:
+                            progress.update(1)
+                        if progress_callback:
+                            progress_callback(y + 1, height)
+            elif dither == "floyd-steinberg":
+                err_curr = [0.0] * (width + 2)
+                err_next = [0.0] * (width + 2)
                 for y in range(height):
                     row = rgb_bytes[y * stride : (y + 1) * stride]
+                    err_curr, err_next = err_next, [0.0] * (width + 2)
                     parts: list[str] = []
                     off = 0
-                    for _ in range(width):
+                    for x in range(width):
                         r = row[off]
                         g = row[off + 1]
                         b = row[off + 2]
                         off += 3
-                        h = (r + g + b) // 3
-                        ch = lut[h]
+                        base = (
+                            (r + g + b) // 3
+                            if is_avg
+                            else (wr * r + wg * g + wb * b) >> 8
+                        )
+                        v = float(base) + err_curr[x + 1]
+                        if v < 0.0:
+                            v = 0.0
+                        elif v > 255.0:
+                            v = 255.0
+                        if levels_m1 <= 0:
+                            qh = 0
+                        else:
+                            idx = int(v * levels_m1 / 255.0 + 0.5)
+                            if idx < 0:
+                                idx = 0
+                            elif idx > levels_m1:
+                                idx = levels_m1
+                            qh = int(idx * 255.0 / levels_m1 + 0.5)
+                        err = v - float(qh)
+                        err_curr[x + 2] += err * (7.0 / 16.0)
+                        err_next[x + 0] += err * (3.0 / 16.0)
+                        err_next[x + 1] += err * (5.0 / 16.0)
+                        err_next[x + 2] += err * (1.0 / 16.0)
+
+                        ch = lut[qh]
                         if mono:
-                            cr = cg = cb = h
+                            cr = cg = cb = qh
                         else:
                             cr, cg, cb = r, g, b
                         parts.append(
@@ -652,20 +942,55 @@ def convert_image(
                         progress.update(1)
                     if progress_callback:
                         progress_callback(y + 1, height)
-            else:
+            else:  # atkinson
+                err_curr = [0.0] * (width + 4)
+                err_next = [0.0] * (width + 4)
+                err_next2 = [0.0] * (width + 4)
                 for y in range(height):
                     row = rgb_bytes[y * stride : (y + 1) * stride]
-                    parts: list[str] = []
+                    err_curr, err_next, err_next2 = (
+                        err_next,
+                        err_next2,
+                        [0.0] * (width + 4),
+                    )
+                    parts = []
                     off = 0
-                    for _ in range(width):
+                    for x in range(width):
                         r = row[off]
                         g = row[off + 1]
                         b = row[off + 2]
                         off += 3
-                        h = (wr * r + wg * g + wb * b) >> 8
-                        ch = lut[h]
+                        base = (
+                            (r + g + b) // 3
+                            if is_avg
+                            else (wr * r + wg * g + wb * b) >> 8
+                        )
+                        idx0 = x + 2
+                        v = float(base) + err_curr[idx0]
+                        if v < 0.0:
+                            v = 0.0
+                        elif v > 255.0:
+                            v = 255.0
+                        if levels_m1 <= 0:
+                            qh = 0
+                        else:
+                            qidx = int(v * levels_m1 / 255.0 + 0.5)
+                            if qidx < 0:
+                                qidx = 0
+                            elif qidx > levels_m1:
+                                qidx = levels_m1
+                            qh = int(qidx * 255.0 / levels_m1 + 0.5)
+                        err = (v - float(qh)) / 8.0
+                        err_curr[idx0 + 1] += err
+                        err_curr[idx0 + 2] += err
+                        err_next[idx0 - 1] += err
+                        err_next[idx0 + 0] += err
+                        err_next[idx0 + 1] += err
+                        err_next2[idx0 + 0] += err
+
+                        ch = lut[qh]
                         if mono:
-                            cr = cg = cb = h
+                            cr = cg = cb = qh
                         else:
                             cr, cg, cb = r, g, b
                         parts.append(
@@ -678,56 +1003,161 @@ def convert_image(
                         progress_callback(y + 1, height)
         elif output_format == "ansi":
             assert ansi_lines is not None
-            if is_avg:
+            if dither == "none":
+                if is_avg:
+                    for y in range(height):
+                        row = rgb_bytes[y * stride : (y + 1) * stride]
+                        parts: list[str] = []
+                        off = 0
+                        if mono:
+                            for _ in range(width):
+                                r = row[off]
+                                g = row[off + 1]
+                                b = row[off + 2]
+                                off += 3
+                                h = (r + g + b) // 3
+                                ch = lut[h]
+                                parts.append(f"\x1b[38;2;{h};{h};{h}m{ch}")
+                        else:
+                            for _ in range(width):
+                                r = row[off]
+                                g = row[off + 1]
+                                b = row[off + 2]
+                                off += 3
+                                h = (r + g + b) // 3
+                                ch = lut[h]
+                                parts.append(f"\x1b[38;2;{r};{g};{b}m{ch}")
+                        ansi_lines.append("".join(parts))
+                        if progress:
+                            progress.update(1)
+                        if progress_callback:
+                            progress_callback(y + 1, height)
+                else:
+                    for y in range(height):
+                        row = rgb_bytes[y * stride : (y + 1) * stride]
+                        parts: list[str] = []
+                        off = 0
+                        if mono:
+                            for _ in range(width):
+                                r = row[off]
+                                g = row[off + 1]
+                                b = row[off + 2]
+                                off += 3
+                                h = (wr * r + wg * g + wb * b) >> 8
+                                ch = lut[h]
+                                parts.append(f"\x1b[38;2;{h};{h};{h}m{ch}")
+                        else:
+                            for _ in range(width):
+                                r = row[off]
+                                g = row[off + 1]
+                                b = row[off + 2]
+                                off += 3
+                                h = (wr * r + wg * g + wb * b) >> 8
+                                ch = lut[h]
+                                parts.append(f"\x1b[38;2;{r};{g};{b}m{ch}")
+                        ansi_lines.append("".join(parts))
+                        if progress:
+                            progress.update(1)
+                        if progress_callback:
+                            progress_callback(y + 1, height)
+            elif dither == "floyd-steinberg":
+                err_curr = [0.0] * (width + 2)
+                err_next = [0.0] * (width + 2)
                 for y in range(height):
                     row = rgb_bytes[y * stride : (y + 1) * stride]
-                    parts: list[str] = []
+                    err_curr, err_next = err_next, [0.0] * (width + 2)
+                    parts = []
                     off = 0
-                    if mono:
-                        for _ in range(width):
-                            r = row[off]
-                            g = row[off + 1]
-                            b = row[off + 2]
-                            off += 3
-                            h = (r + g + b) // 3
-                            ch = lut[h]
-                            parts.append(f"\x1b[38;2;{h};{h};{h}m{ch}")
-                    else:
-                        for _ in range(width):
-                            r = row[off]
-                            g = row[off + 1]
-                            b = row[off + 2]
-                            off += 3
-                            h = (r + g + b) // 3
-                            ch = lut[h]
+                    for x in range(width):
+                        r = row[off]
+                        g = row[off + 1]
+                        b = row[off + 2]
+                        off += 3
+                        base = (
+                            (r + g + b) // 3
+                            if is_avg
+                            else (wr * r + wg * g + wb * b) >> 8
+                        )
+                        v = float(base) + err_curr[x + 1]
+                        if v < 0.0:
+                            v = 0.0
+                        elif v > 255.0:
+                            v = 255.0
+                        if levels_m1 <= 0:
+                            qh = 0
+                        else:
+                            idx = int(v * levels_m1 / 255.0 + 0.5)
+                            if idx < 0:
+                                idx = 0
+                            elif idx > levels_m1:
+                                idx = levels_m1
+                            qh = int(idx * 255.0 / levels_m1 + 0.5)
+                        err = v - float(qh)
+                        err_curr[x + 2] += err * (7.0 / 16.0)
+                        err_next[x + 0] += err * (3.0 / 16.0)
+                        err_next[x + 1] += err * (5.0 / 16.0)
+                        err_next[x + 2] += err * (1.0 / 16.0)
+
+                        ch = lut[qh]
+                        if mono:
+                            parts.append(f"\x1b[38;2;{qh};{qh};{qh}m{ch}")
+                        else:
                             parts.append(f"\x1b[38;2;{r};{g};{b}m{ch}")
                     ansi_lines.append("".join(parts))
                     if progress:
                         progress.update(1)
                     if progress_callback:
                         progress_callback(y + 1, height)
-            else:
+            else:  # atkinson
+                err_curr = [0.0] * (width + 4)
+                err_next = [0.0] * (width + 4)
+                err_next2 = [0.0] * (width + 4)
                 for y in range(height):
                     row = rgb_bytes[y * stride : (y + 1) * stride]
-                    parts: list[str] = []
+                    err_curr, err_next, err_next2 = (
+                        err_next,
+                        err_next2,
+                        [0.0] * (width + 4),
+                    )
+                    parts = []
                     off = 0
-                    if mono:
-                        for _ in range(width):
-                            r = row[off]
-                            g = row[off + 1]
-                            b = row[off + 2]
-                            off += 3
-                            h = (wr * r + wg * g + wb * b) >> 8
-                            ch = lut[h]
-                            parts.append(f"\x1b[38;2;{h};{h};{h}m{ch}")
-                    else:
-                        for _ in range(width):
-                            r = row[off]
-                            g = row[off + 1]
-                            b = row[off + 2]
-                            off += 3
-                            h = (wr * r + wg * g + wb * b) >> 8
-                            ch = lut[h]
+                    for x in range(width):
+                        r = row[off]
+                        g = row[off + 1]
+                        b = row[off + 2]
+                        off += 3
+                        base = (
+                            (r + g + b) // 3
+                            if is_avg
+                            else (wr * r + wg * g + wb * b) >> 8
+                        )
+                        idx0 = x + 2
+                        v = float(base) + err_curr[idx0]
+                        if v < 0.0:
+                            v = 0.0
+                        elif v > 255.0:
+                            v = 255.0
+                        if levels_m1 <= 0:
+                            qh = 0
+                        else:
+                            qidx = int(v * levels_m1 / 255.0 + 0.5)
+                            if qidx < 0:
+                                qidx = 0
+                            elif qidx > levels_m1:
+                                qidx = levels_m1
+                            qh = int(qidx * 255.0 / levels_m1 + 0.5)
+                        err = (v - float(qh)) / 8.0
+                        err_curr[idx0 + 1] += err
+                        err_curr[idx0 + 2] += err
+                        err_next[idx0 - 1] += err
+                        err_next[idx0 + 0] += err
+                        err_next[idx0 + 1] += err
+                        err_next2[idx0 + 0] += err
+
+                        ch = lut[qh]
+                        if mono:
+                            parts.append(f"\x1b[38;2;{qh};{qh};{qh}m{ch}")
+                        else:
                             parts.append(f"\x1b[38;2;{r};{g};{b}m{ch}")
                     ansi_lines.append("".join(parts))
                     if progress:
@@ -781,6 +1211,7 @@ def convert_video(
     mono=False,
     font_path=None,
     grayscale_mode: str = "avg",
+    dither: str = "none",
 ):
     """Convert a video or webcam stream to ASCII using ``convert_image`` for each frame.
 
@@ -830,6 +1261,7 @@ def convert_video(
             mono=mono,
             font_path=font_path,
             grayscale_mode=grayscale_mode,
+            dither=dither,
         )
         if assemble and output_format == "image":
             out_path = os.path.join(
