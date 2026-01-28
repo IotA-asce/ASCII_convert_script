@@ -433,6 +433,7 @@ def convert_image(
     font_path: str | None = None,
     grayscale_mode: str = "avg",
     dither: str = "none",
+    assemble: bool = False,
     cell_width: int = ONE_CHAR_WIDTH,
     cell_height: int = ONE_CHAR_HEIGHT,
     progress_callback: Callable[[int, int], None] | None = None,
@@ -462,6 +463,8 @@ def convert_image(
         dither (str): Optional error-diffusion dithering applied to brightness
             before character selection. One of: `none`, `floyd-steinberg`,
             `atkinson`.
+        assemble (bool): If the input is an animated image and `output_format`
+            is `image`, assemble frames into a single animated GIF.
         cell_width (int): Width (in pixels) of one character cell when rendering
             `format=image`. Also used for aspect correction when resizing.
         cell_height (int): Height (in pixels) of one character cell when
@@ -537,9 +540,16 @@ def convert_image(
     n_frames = int(getattr(_im, "n_frames", 1)) if is_animated else 1
     frames_iter = ImageSequence.Iterator(_im) if is_animated else (_im,)
 
+    assemble_gif = (
+        bool(assemble) and is_animated and output_format == "image" and n_frames > 1
+    )
+    gif_frames: list[Image.Image] = []
+    gif_durations: list[int] = []
+
     for frame_index, frame in enumerate(frames_iter):
         if is_animated:
             frame = frame.copy()
+        frame_duration_ms = int(getattr(frame, "info", {}).get("duration", 40))
         width, height = frame.size
         frame = frame.resize(
             (
@@ -1248,7 +1258,11 @@ def convert_image(
 
             if output_format == "image":
                 assert output_image is not None
-                output_image.save(os.path.join(output_dir, file_stem + ".png"))
+                if assemble_gif:
+                    gif_frames.append(output_image)
+                    gif_durations.append(frame_duration_ms)
+                else:
+                    output_image.save(os.path.join(output_dir, file_stem + ".png"))
             elif output_format == "text":
                 assert text_lines is not None
                 lines = text_lines
@@ -1272,6 +1286,22 @@ def convert_image(
             sys.stdout.write("\n")
             for line in ansi_lines:
                 sys.stdout.write(line + "\x1b[0m\n")
+
+    if assemble_gif and gif_frames:
+        os.makedirs(output_dir, exist_ok=True)
+        gif_stem = f"O_h_{bg_brightness}_f_{scale_factor}_{base_name}"
+        gif_path = os.path.join(output_dir, gif_stem + ".gif")
+        duration = gif_durations if gif_durations else 40
+        try:
+            gif_frames[0].save(
+                gif_path,
+                save_all=True,
+                append_images=gif_frames[1:],
+                duration=duration,
+                loop=0,
+            )
+        except OSError as exc:
+            print(f"Could not write GIF '{gif_path}': {exc}")
 
 
 def convert_video(

@@ -95,6 +95,11 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
         type=int,
         help="Character cell height in pixels (image output + aspect correction)",
     )
+    parser.add_argument(
+        "--assemble",
+        action="store_true",
+        help="Assemble frames into an animated GIF when possible",
+    )
     return parser.parse_args(args)
 
 
@@ -140,6 +145,7 @@ def main():
             bg_brightness=bg_brightness,
             output_dir=output_dir,
             output_format=output_format,
+            assemble=args.assemble,
             mono=args.mono,
             font_path=args.font,
             grayscale_mode=grayscale_mode,
@@ -158,6 +164,7 @@ def main():
                 bg_brightness,
                 output_dir,
                 output_format,
+                assemble=args.assemble,
                 mono=args.mono,
                 font_path=args.font,
                 grayscale_mode=grayscale_mode,
@@ -177,6 +184,7 @@ def main():
             bg_brightness,
             output_dir,
             output_format,
+            assemble=args.assemble,
             mono=args.mono,
             font_path=args.font,
             grayscale_mode=grayscale_mode,

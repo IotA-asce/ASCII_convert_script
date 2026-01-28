@@ -27,6 +27,7 @@ def test_parse_args_defaults():
     assert args.dither is None
     assert args.cell_width is None
     assert args.cell_height is None
+    assert args.assemble is False
 
 
 def test_parse_args_grayscale_flag():
@@ -43,6 +44,11 @@ def test_parse_args_cell_size_flags():
     args = ascii_mod.parse_args(["--cell-width", "8", "--cell-height", "16"])
     assert args.cell_width == 8
     assert args.cell_height == 16
+
+
+def test_parse_args_assemble_flag():
+    args = ascii_mod.parse_args(["--assemble"])
+    assert args.assemble is True
 
 
 def test_convert_image_dither_floyd_steinberg_tiny_gradient(tmp_path):
@@ -126,6 +132,38 @@ def test_convert_image_cell_size_affects_aspect(tmp_path):
     lines = out_file.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 4
     assert all(len(line) == 2 for line in lines)
+
+
+def test_convert_image_assemble_animated_gif(tmp_path):
+    frame1 = Image.new("RGB", (2, 4), color=(255, 255, 255))
+    frame2 = Image.new("RGB", (2, 4), color=(0, 0, 0))
+    gif_path = tmp_path / "anim.gif"
+    frame1.save(
+        gif_path,
+        save_all=True,
+        append_images=[frame2],
+        duration=[40, 40],
+        loop=0,
+    )
+
+    out_dir = tmp_path / "out"
+    ascii_mod.convert_image(
+        gif_path,
+        scale_factor=1.0,
+        bg_brightness=0,
+        output_dir=out_dir,
+        output_format="image",
+        assemble=True,
+        cell_width=1,
+        cell_height=1,
+    )
+
+    out_file = out_dir / f"O_h_0_f_1.0_{gif_path.stem}.gif"
+    assert out_file.exists()
+
+    with Image.open(out_file) as im:
+        assert getattr(im, "is_animated", False)
+        assert int(getattr(im, "n_frames", 1)) == 2
 
 
 def test_parse_args_ansi_format():
