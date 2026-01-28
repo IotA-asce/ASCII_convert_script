@@ -4,10 +4,10 @@ This is a list of small-to-medium iterations (performance, quality, UX, and new 
 Each section is a self-contained checklist.
 
 ## 1) Grayscale / luma modes (quality feature)
-- [ ] Add `--grayscale {avg,luma601,luma709}` (and GUI equivalent)
-- [ ] Keep default as current behavior (`avg`) for backward compatibility
-- [ ] Add docs with side-by-side outputs and a short "when to use" note
-- [ ] Add unit tests that lock down expected mapping for each mode
+- [x] Add `--grayscale {avg,luma601,luma709}` (and GUI equivalent)
+- [x] Keep default as current behavior (`avg`) for backward compatibility
+- [x] Add docs with side-by-side outputs and a short "when to use" note
+- [x] Add unit tests that lock down expected mapping for each mode
 
 ## 2) Optional dithering (quality feature)
 - [ ] Add `--dither {none,floyd-steinberg,atkinson}` (GUI toggle)

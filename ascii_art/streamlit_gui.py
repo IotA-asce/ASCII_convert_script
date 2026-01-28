@@ -22,6 +22,10 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
+
+# Pillow changed resampling constants to an enum; use getattr for compatibility.
+_RESAMPLE_NEAREST = getattr(getattr(Image, "Resampling", Image), "NEAREST")
+
 # When Streamlit runs a script by path (e.g. `streamlit run ascii_art/streamlit_gui.py`)
 # it adds the script directory (`ascii_art/`) to `sys.path`, not the repo root.
 # Ensure the repo root is importable so `import ascii_art` works.
@@ -38,6 +42,7 @@ CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
 DEFAULTS: dict[str, Any] = {
     "scale": 0.2,
     "brightness": 30,
+    "grayscale": "avg",
     "format": "image",
     "dynamic_set": False,
     "output_dir": "./assets/output",
@@ -123,6 +128,7 @@ def _ansi_preview(
     *,
     scale: float,
     brightness: int,
+    grayscale_mode: str,
     dynamic_set: bool,
     font_path: str | None,
     progress_cb,
@@ -138,6 +144,7 @@ def _ansi_preview(
             output_dir="./assets/output",
             mono=True,
             font_path=font_path,
+            grayscale_mode=grayscale_mode,
             progress_callback=progress_cb,
             base_name="preview",
         )
@@ -173,12 +180,15 @@ def _render_ascii_image(
     bg_brightness: int,
     mono: bool,
     font_path: str | None,
+    grayscale_mode: str,
     font: ImageFont.ImageFont | None = None,
     char_map: list[str] | None = None,
 ) -> Image.Image:
     """Render a single frame to a PIL image (no file IO)."""
 
-    def _load_font(user_font: str | None) -> ImageFont.ImageFont:
+    def _load_font(
+        user_font: str | None,
+    ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         windows_font = r"C:\\Windows\\Fonts\\lucon.ttf"
         linux_font = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
         if user_font:
@@ -202,7 +212,7 @@ def _render_ascii_image(
             * (converter.ONE_CHAR_WIDTH / converter.ONE_CHAR_HEIGHT)
         ),
     )
-    frame = img.resize((new_w, new_h), Image.NEAREST).convert("RGB")
+    frame = img.resize((new_w, new_h), _RESAMPLE_NEAREST).convert("RGB")
     pix = frame.load()
 
     out = Image.new(
@@ -215,11 +225,26 @@ def _render_ascii_image(
         font = _load_font(font_path)
     if char_map is None:
         char_map = [converter.get_char(i) for i in range(256)]
+    assert char_map is not None
+
+    if grayscale_mode not in ("avg", "luma601", "luma709"):
+        grayscale_mode = "avg"
+
+    is_avg = grayscale_mode == "avg"
+    wr = wg = wb = 0
+    if not is_avg:
+        if grayscale_mode == "luma601":
+            wr, wg, wb = 77, 150, 29
+        else:
+            wr, wg, wb = 54, 183, 19
 
     for y in range(new_h):
         for x in range(new_w):
             r, g, b = pix[x, y]
-            h = int(r / 3 + g / 3 + b / 3)
+            if is_avg:
+                h = (r + g + b) // 3
+            else:
+                h = (wr * r + wg * g + wb * b) >> 8
             ch = char_map[h]
             color = (h, h, h) if mono else (r, g, b)
             draw.text(
@@ -237,6 +262,7 @@ def _convert_and_collect_outputs(
     *,
     scale: float,
     brightness: int,
+    grayscale_mode: str,
     output_format: str,
     output_dir: str,
     dynamic_set: bool,
@@ -255,6 +281,7 @@ def _convert_and_collect_outputs(
             output_format=output_format,
             mono=False,
             font_path=font_path,
+            grayscale_mode=grayscale_mode,
             base_name=base,
         )
 
@@ -300,6 +327,17 @@ def run_app() -> None:
             max_value=255,
             value=int(cfg.get("brightness", DEFAULTS["brightness"])),
         )
+        grayscale_mode = st.selectbox(
+            "Grayscale mode",
+            ["avg", "luma601", "luma709"],
+            index=["avg", "luma601", "luma709"].index(
+                str(cfg.get("grayscale", DEFAULTS["grayscale"]))
+            )
+            if str(cfg.get("grayscale", DEFAULTS["grayscale"]))
+            in ("avg", "luma601", "luma709")
+            else 0,
+            help="Controls brightness mapping for character selection.",
+        )
         output_format = st.selectbox(
             "Output format",
             ["image", "text", "html"],
@@ -344,6 +382,7 @@ def run_app() -> None:
             {
                 "scale": scale,
                 "brightness": brightness,
+                "grayscale": grayscale_mode,
                 "format": output_format,
                 "dynamic_set": dynamic_set,
                 "output_dir": output_dir,
@@ -390,6 +429,7 @@ def run_app() -> None:
                         current.image,
                         scale=scale,
                         brightness=brightness,
+                        grayscale_mode=grayscale_mode,
                         dynamic_set=dynamic_set,
                         font_path=font_path,
                         progress_cb=_progress_cb,
@@ -407,6 +447,7 @@ def run_app() -> None:
                         inputs,
                         scale=scale,
                         brightness=brightness,
+                        grayscale_mode=grayscale_mode,
                         output_format=output_format,
                         output_dir=output_dir,
                         dynamic_set=dynamic_set,
@@ -609,6 +650,7 @@ def run_app() -> None:
                     bg_brightness=int(brightness),
                     mono=bool(live_mono),
                     font_path=font_path,
+                    grayscale_mode=grayscale_mode,
                     font=self._font,
                     char_map=self._char_map,
                 )

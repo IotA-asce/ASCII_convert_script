@@ -399,6 +399,7 @@ def convert_image(
     base_name: str | None = None,
     mono: bool = False,
     font_path: str | None = None,
+    grayscale_mode: str = "avg",
     progress_callback: Callable[[int, int], None] | None = None,
 ) -> None:
     """
@@ -418,6 +419,11 @@ def convert_image(
                             Defaults to ``./assets/output``.
         mono (bool): Render characters in grayscale instead of colour.
         font_path (str, optional): Path to a TTF font used for rendering.
+        grayscale_mode (str): How RGB pixels are mapped to a single brightness
+            value for character selection. One of:
+            - `avg`: average of channels (current behavior)
+            - `luma601`: BT.601 luma (integer approximation)
+            - `luma709`: BT.709 luma (integer approximation)
         progress_callback (callable, optional): Callback invoked as
             ``progress_callback(current, total)`` to report the number of
             processed rows.
@@ -473,6 +479,9 @@ def convert_image(
 
     fnt = _load_font(font_path)
 
+    if grayscale_mode not in ("avg", "luma601", "luma709"):
+        raise ValueError("grayscale_mode must be one of: avg, luma601, luma709")
+
     is_animated = getattr(_im, "is_animated", False)
     n_frames = int(getattr(_im, "n_frames", 1)) if is_animated else 1
     frames_iter = ImageSequence.Iterator(_im) if is_animated else (_im,)
@@ -493,6 +502,14 @@ def convert_image(
         rgb_bytes = memoryview(frame_rgb.tobytes())
         stride = width * 3
         lut = CHAR_LUT
+
+        is_avg = grayscale_mode == "avg"
+        wr = wg = wb = 0
+        if not is_avg:
+            if grayscale_mode == "luma601":
+                wr, wg, wb = 77, 150, 29
+            else:  # luma709
+                wr, wg, wb = 54, 183, 19
 
         output_image = None
         draw = None
@@ -527,100 +544,196 @@ def convert_image(
         if output_format == "image":
             assert draw is not None
             x_positions = [x * ONE_CHAR_WIDTH for x in range(width)]
-            for y in range(height):
-                row = rgb_bytes[y * stride : (y + 1) * stride]
-                y_pos = y * ONE_CHAR_HEIGHT
-                off = 0
-                for x in range(width):
-                    r = row[off]
-                    g = row[off + 1]
-                    b = row[off + 2]
-                    off += 3
-                    h = (r + g + b) // 3
-                    ch = lut[h]
-                    color = (h, h, h) if mono else (r, g, b)
-                    draw.text(
-                        (x_positions[x], y_pos),
-                        ch,
-                        font=fnt,
-                        fill=color,
-                    )
-                if progress:
-                    progress.update(1)
-                if progress_callback:
-                    progress_callback(y + 1, height)
+            if is_avg:
+                for y in range(height):
+                    row = rgb_bytes[y * stride : (y + 1) * stride]
+                    y_pos = y * ONE_CHAR_HEIGHT
+                    off = 0
+                    for x in range(width):
+                        r = row[off]
+                        g = row[off + 1]
+                        b = row[off + 2]
+                        off += 3
+                        h = (r + g + b) // 3
+                        ch = lut[h]
+                        color = (h, h, h) if mono else (r, g, b)
+                        draw.text(
+                            (x_positions[x], y_pos),
+                            ch,
+                            font=fnt,
+                            fill=color,
+                        )
+                    if progress:
+                        progress.update(1)
+                    if progress_callback:
+                        progress_callback(y + 1, height)
+            else:
+                for y in range(height):
+                    row = rgb_bytes[y * stride : (y + 1) * stride]
+                    y_pos = y * ONE_CHAR_HEIGHT
+                    off = 0
+                    for x in range(width):
+                        r = row[off]
+                        g = row[off + 1]
+                        b = row[off + 2]
+                        off += 3
+                        h = (wr * r + wg * g + wb * b) >> 8
+                        ch = lut[h]
+                        color = (h, h, h) if mono else (r, g, b)
+                        draw.text(
+                            (x_positions[x], y_pos),
+                            ch,
+                            font=fnt,
+                            fill=color,
+                        )
+                    if progress:
+                        progress.update(1)
+                    if progress_callback:
+                        progress_callback(y + 1, height)
         elif output_format == "text":
             assert text_lines is not None
-            for y in range(height):
-                row = rgb_bytes[y * stride : (y + 1) * stride]
-                line_chars: list[str] = []
-                off = 0
-                for _ in range(width):
-                    r = row[off]
-                    g = row[off + 1]
-                    b = row[off + 2]
-                    off += 3
-                    h = (r + g + b) // 3
-                    line_chars.append(lut[h])
-                text_lines.append("".join(line_chars))
-                if progress:
-                    progress.update(1)
-                if progress_callback:
-                    progress_callback(y + 1, height)
+            if is_avg:
+                for y in range(height):
+                    row = rgb_bytes[y * stride : (y + 1) * stride]
+                    line_chars: list[str] = []
+                    off = 0
+                    for _ in range(width):
+                        r = row[off]
+                        g = row[off + 1]
+                        b = row[off + 2]
+                        off += 3
+                        h = (r + g + b) // 3
+                        line_chars.append(lut[h])
+                    text_lines.append("".join(line_chars))
+                    if progress:
+                        progress.update(1)
+                    if progress_callback:
+                        progress_callback(y + 1, height)
+            else:
+                for y in range(height):
+                    row = rgb_bytes[y * stride : (y + 1) * stride]
+                    line_chars: list[str] = []
+                    off = 0
+                    for _ in range(width):
+                        r = row[off]
+                        g = row[off + 1]
+                        b = row[off + 2]
+                        off += 3
+                        h = (wr * r + wg * g + wb * b) >> 8
+                        line_chars.append(lut[h])
+                    text_lines.append("".join(line_chars))
+                    if progress:
+                        progress.update(1)
+                    if progress_callback:
+                        progress_callback(y + 1, height)
         elif output_format == "html":
             assert html_lines is not None
-            for y in range(height):
-                row = rgb_bytes[y * stride : (y + 1) * stride]
-                parts: list[str] = []
-                off = 0
-                for _ in range(width):
-                    r = row[off]
-                    g = row[off + 1]
-                    b = row[off + 2]
-                    off += 3
-                    h = (r + g + b) // 3
-                    ch = lut[h]
-                    if mono:
-                        cr = cg = cb = h
-                    else:
-                        cr, cg, cb = r, g, b
-                    parts.append(
-                        f'<span style="color:rgb({cr},{cg},{cb})">{html.escape(ch)}</span>'
-                    )
-                html_lines.append("".join(parts))
-                if progress:
-                    progress.update(1)
-                if progress_callback:
-                    progress_callback(y + 1, height)
+            if is_avg:
+                for y in range(height):
+                    row = rgb_bytes[y * stride : (y + 1) * stride]
+                    parts: list[str] = []
+                    off = 0
+                    for _ in range(width):
+                        r = row[off]
+                        g = row[off + 1]
+                        b = row[off + 2]
+                        off += 3
+                        h = (r + g + b) // 3
+                        ch = lut[h]
+                        if mono:
+                            cr = cg = cb = h
+                        else:
+                            cr, cg, cb = r, g, b
+                        parts.append(
+                            f'<span style="color:rgb({cr},{cg},{cb})">{html.escape(ch)}</span>'
+                        )
+                    html_lines.append("".join(parts))
+                    if progress:
+                        progress.update(1)
+                    if progress_callback:
+                        progress_callback(y + 1, height)
+            else:
+                for y in range(height):
+                    row = rgb_bytes[y * stride : (y + 1) * stride]
+                    parts: list[str] = []
+                    off = 0
+                    for _ in range(width):
+                        r = row[off]
+                        g = row[off + 1]
+                        b = row[off + 2]
+                        off += 3
+                        h = (wr * r + wg * g + wb * b) >> 8
+                        ch = lut[h]
+                        if mono:
+                            cr = cg = cb = h
+                        else:
+                            cr, cg, cb = r, g, b
+                        parts.append(
+                            f'<span style="color:rgb({cr},{cg},{cb})">{html.escape(ch)}</span>'
+                        )
+                    html_lines.append("".join(parts))
+                    if progress:
+                        progress.update(1)
+                    if progress_callback:
+                        progress_callback(y + 1, height)
         elif output_format == "ansi":
             assert ansi_lines is not None
-            for y in range(height):
-                row = rgb_bytes[y * stride : (y + 1) * stride]
-                parts: list[str] = []
-                off = 0
-                if mono:
-                    for _ in range(width):
-                        r = row[off]
-                        g = row[off + 1]
-                        b = row[off + 2]
-                        off += 3
-                        h = (r + g + b) // 3
-                        ch = lut[h]
-                        parts.append(f"\x1b[38;2;{h};{h};{h}m{ch}")
-                else:
-                    for _ in range(width):
-                        r = row[off]
-                        g = row[off + 1]
-                        b = row[off + 2]
-                        off += 3
-                        h = (r + g + b) // 3
-                        ch = lut[h]
-                        parts.append(f"\x1b[38;2;{r};{g};{b}m{ch}")
-                ansi_lines.append("".join(parts))
-                if progress:
-                    progress.update(1)
-                if progress_callback:
-                    progress_callback(y + 1, height)
+            if is_avg:
+                for y in range(height):
+                    row = rgb_bytes[y * stride : (y + 1) * stride]
+                    parts: list[str] = []
+                    off = 0
+                    if mono:
+                        for _ in range(width):
+                            r = row[off]
+                            g = row[off + 1]
+                            b = row[off + 2]
+                            off += 3
+                            h = (r + g + b) // 3
+                            ch = lut[h]
+                            parts.append(f"\x1b[38;2;{h};{h};{h}m{ch}")
+                    else:
+                        for _ in range(width):
+                            r = row[off]
+                            g = row[off + 1]
+                            b = row[off + 2]
+                            off += 3
+                            h = (r + g + b) // 3
+                            ch = lut[h]
+                            parts.append(f"\x1b[38;2;{r};{g};{b}m{ch}")
+                    ansi_lines.append("".join(parts))
+                    if progress:
+                        progress.update(1)
+                    if progress_callback:
+                        progress_callback(y + 1, height)
+            else:
+                for y in range(height):
+                    row = rgb_bytes[y * stride : (y + 1) * stride]
+                    parts: list[str] = []
+                    off = 0
+                    if mono:
+                        for _ in range(width):
+                            r = row[off]
+                            g = row[off + 1]
+                            b = row[off + 2]
+                            off += 3
+                            h = (wr * r + wg * g + wb * b) >> 8
+                            ch = lut[h]
+                            parts.append(f"\x1b[38;2;{h};{h};{h}m{ch}")
+                    else:
+                        for _ in range(width):
+                            r = row[off]
+                            g = row[off + 1]
+                            b = row[off + 2]
+                            off += 3
+                            h = (wr * r + wg * g + wb * b) >> 8
+                            ch = lut[h]
+                            parts.append(f"\x1b[38;2;{r};{g};{b}m{ch}")
+                    ansi_lines.append("".join(parts))
+                    if progress:
+                        progress.update(1)
+                    if progress_callback:
+                        progress_callback(y + 1, height)
         if progress:
             progress.close()
 
@@ -667,6 +780,7 @@ def convert_video(
     assemble=False,
     mono=False,
     font_path=None,
+    grayscale_mode: str = "avg",
 ):
     """Convert a video or webcam stream to ASCII using ``convert_image`` for each frame.
 
@@ -715,6 +829,7 @@ def convert_video(
             base_name=frame_name,
             mono=mono,
             font_path=font_path,
+            grayscale_mode=grayscale_mode,
         )
         if assemble and output_format == "image":
             out_path = os.path.join(

@@ -67,6 +67,11 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Render ASCII art in grayscale instead of colour",
     )
+    parser.add_argument(
+        "--grayscale",
+        choices=["avg", "luma601", "luma709"],
+        help="Brightness mapping used for character selection",
+    )
     return parser.parse_args(args)
 
 
@@ -90,6 +95,7 @@ def main():
 
     output_dir = args.output_dir if args.output_dir is not None else output_dir_cfg
     output_format = args.format if args.format is not None else format_cfg
+    grayscale_mode = args.grayscale if args.grayscale is not None else "avg"
 
     if args.video and args.webcam:
         print("Choose either --video or --webcam, not both")
@@ -105,6 +111,7 @@ def main():
             output_format=output_format,
             mono=args.mono,
             font_path=args.font,
+            grayscale_mode=grayscale_mode,
         )
     elif args.batch:
         batch_dir = Path(args.batch)
@@ -119,6 +126,7 @@ def main():
                 output_format,
                 mono=args.mono,
                 font_path=args.font,
+                grayscale_mode=grayscale_mode,
             )
             progress.update(1)
         progress.close()
@@ -134,6 +142,7 @@ def main():
             output_format,
             mono=args.mono,
             font_path=args.font,
+            grayscale_mode=grayscale_mode,
         )
 
 

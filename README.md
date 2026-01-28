@@ -56,6 +56,15 @@ Rendering
 - `--scale <float>`: output scaling factor (0 < scale <= 1).
 - `--brightness <int>`: background brightness (0-255).
 - `--mono`: render in grayscale instead of color.
+- `--grayscale {avg,luma601,luma709}`: brightness mapping used for character
+  selection (default: `avg`).
+  - `avg`: `(r + g + b) / 3` (current behavior)
+  - `luma601`: BT.601 approximation (weights favor green)
+  - `luma709`: BT.709 approximation (weights favor green even more)
+  Example for a pure red pixel `(255,0,0)`:
+  - `avg` -> 85
+  - `luma601` -> 76
+  - `luma709` -> 53
 
 Character set / fonts
 - `--dynamic-set`: generate a brightness-ranked character set via `ascii_art.charset`.
@@ -161,6 +170,15 @@ Output format (select)
 - `image`: writes a `.png` with characters drawn in the original pixel colors.
 - `text`: writes a UTF-8 `.txt` (no color).
 - `html`: writes a UTF-8 `.html` with per-character colored `<span>` tags.
+
+Grayscale mode (select)
+- What it does: chooses how RGB pixels are reduced to a single brightness value
+  for selecting ASCII characters.
+- Options:
+  - `avg`: average of channels (default)
+  - `luma601`: closer to perceived brightness (BT.601)
+  - `luma709`: closer to perceived brightness (BT.709)
+- Example for a pure red pixel `(255,0,0)`: `avg=85`, `luma601=76`, `luma709=53`.
 
 Dynamic character set (checkbox)
 - What it does: generates a brightness-ranked character set using

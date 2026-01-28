@@ -23,6 +23,12 @@ def test_parse_args_defaults():
     assert args.webcam is False
     assert args.mono is False
     assert args.font is None
+    assert args.grayscale is None
+
+
+def test_parse_args_grayscale_flag():
+    args = ascii_mod.parse_args(["--grayscale", "luma601"])
+    assert args.grayscale == "luma601"
 
 
 def test_parse_args_ansi_format():
@@ -114,6 +120,52 @@ def test_convert_image_mono_ansi_stdout(tmp_path, capsys):
     captured = capsys.readouterr().out
     expected_char = ascii_mod.get_char(85)
     expected_line = f"\x1b[38;2;85;85;85m{expected_char}\x1b[0m"
+    assert expected_line in captured
+
+
+def test_convert_image_mono_ansi_grayscale_luma601(tmp_path, capsys):
+    img = Image.new("RGB", (1, 1), color=(255, 0, 0))
+    input_dir = tmp_path / "input"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    test_name = "test_mono_ansi_luma601.png"
+    test_path = input_dir / test_name
+    img.save(test_path)
+    out_dir = tmp_path / "out"
+    ascii_mod.convert_image(
+        test_path,
+        scale_factor=1.0,
+        bg_brightness=0,
+        output_dir=out_dir,
+        output_format="ansi",
+        mono=True,
+        grayscale_mode="luma601",
+    )
+    captured = capsys.readouterr().out
+    expected_char = ascii_mod.get_char(76)
+    expected_line = f"\x1b[38;2;76;76;76m{expected_char}\x1b[0m"
+    assert expected_line in captured
+
+
+def test_convert_image_mono_ansi_grayscale_luma709(tmp_path, capsys):
+    img = Image.new("RGB", (1, 1), color=(255, 0, 0))
+    input_dir = tmp_path / "input"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    test_name = "test_mono_ansi_luma709.png"
+    test_path = input_dir / test_name
+    img.save(test_path)
+    out_dir = tmp_path / "out"
+    ascii_mod.convert_image(
+        test_path,
+        scale_factor=1.0,
+        bg_brightness=0,
+        output_dir=out_dir,
+        output_format="ansi",
+        mono=True,
+        grayscale_mode="luma709",
+    )
+    captured = capsys.readouterr().out
+    expected_char = ascii_mod.get_char(53)
+    expected_line = f"\x1b[38;2;53;53;53m{expected_char}\x1b[0m"
     assert expected_line in captured
 
 
