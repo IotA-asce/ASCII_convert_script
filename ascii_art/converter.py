@@ -434,6 +434,8 @@ def convert_image(
     grayscale_mode: str = "avg",
     dither: str = "none",
     assemble: bool = False,
+    gif_fps: float | None = None,
+    gif_loop: int = 0,
     cell_width: int = ONE_CHAR_WIDTH,
     cell_height: int = ONE_CHAR_HEIGHT,
     progress_callback: Callable[[int, int], None] | None = None,
@@ -465,6 +467,10 @@ def convert_image(
             `atkinson`.
         assemble (bool): If the input is an animated image and `output_format`
             is `image`, assemble frames into a single animated GIF.
+        gif_fps (float, optional): When assembling an animated GIF, override the
+            per-frame duration using a fixed frames-per-second value.
+        gif_loop (int): When assembling an animated GIF, the GIF loop count
+            passed to Pillow. 0 means loop forever.
         cell_width (int): Width (in pixels) of one character cell when rendering
             `format=image`. Also used for aspect correction when resizing.
         cell_height (int): Height (in pixels) of one character cell when
@@ -530,6 +536,12 @@ def convert_image(
 
     if dither not in ("none", "floyd-steinberg", "atkinson"):
         raise ValueError("dither must be one of: none, floyd-steinberg, atkinson")
+
+    if gif_fps is not None and float(gif_fps) <= 0:
+        raise ValueError("gif_fps must be positive")
+    gif_loop = int(gif_loop)
+    if gif_loop < 0:
+        raise ValueError("gif_loop must be >= 0")
 
     cell_width = int(cell_width)
     cell_height = int(cell_height)
@@ -1291,14 +1303,18 @@ def convert_image(
         os.makedirs(output_dir, exist_ok=True)
         gif_stem = f"O_h_{bg_brightness}_f_{scale_factor}_{base_name}"
         gif_path = os.path.join(output_dir, gif_stem + ".gif")
-        duration = gif_durations if gif_durations else 40
+        if gif_fps is not None:
+            frame_ms = max(1, int(1000.0 / float(gif_fps)))
+            duration = [frame_ms] * len(gif_frames)
+        else:
+            duration = gif_durations if gif_durations else 40
         try:
             gif_frames[0].save(
                 gif_path,
                 save_all=True,
                 append_images=gif_frames[1:],
                 duration=duration,
-                loop=0,
+                loop=gif_loop,
             )
         except OSError as exc:
             print(f"Could not write GIF '{gif_path}': {exc}")

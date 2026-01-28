@@ -100,6 +100,16 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Assemble frames into an animated GIF when possible",
     )
+    parser.add_argument(
+        "--gif-fps",
+        type=float,
+        help="Override assembled GIF fps",
+    )
+    parser.add_argument(
+        "--gif-loop",
+        type=int,
+        help="Assembled GIF loop count (0 = forever)",
+    )
     return parser.parse_args(args)
 
 
@@ -165,6 +175,8 @@ def main():
                 output_dir,
                 output_format,
                 assemble=args.assemble,
+                gif_fps=args.gif_fps,
+                gif_loop=0 if args.gif_loop is None else args.gif_loop,
                 mono=args.mono,
                 font_path=args.font,
                 grayscale_mode=grayscale_mode,
@@ -185,6 +197,8 @@ def main():
             output_dir,
             output_format,
             assemble=args.assemble,
+            gif_fps=args.gif_fps,
+            gif_loop=0 if args.gif_loop is None else args.gif_loop,
             mono=args.mono,
             font_path=args.font,
             grayscale_mode=grayscale_mode,

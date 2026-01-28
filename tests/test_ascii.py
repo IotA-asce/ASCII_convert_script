@@ -28,6 +28,8 @@ def test_parse_args_defaults():
     assert args.cell_width is None
     assert args.cell_height is None
     assert args.assemble is False
+    assert args.gif_fps is None
+    assert args.gif_loop is None
 
 
 def test_parse_args_grayscale_flag():
@@ -49,6 +51,12 @@ def test_parse_args_cell_size_flags():
 def test_parse_args_assemble_flag():
     args = ascii_mod.parse_args(["--assemble"])
     assert args.assemble is True
+
+
+def test_parse_args_gif_flags():
+    args = ascii_mod.parse_args(["--gif-fps", "12", "--gif-loop", "2"])
+    assert args.gif_fps == 12.0
+    assert args.gif_loop == 2
 
 
 def test_convert_image_dither_floyd_steinberg_tiny_gradient(tmp_path):
@@ -154,6 +162,8 @@ def test_convert_image_assemble_animated_gif(tmp_path):
         output_dir=out_dir,
         output_format="image",
         assemble=True,
+        gif_fps=20,
+        gif_loop=2,
         cell_width=1,
         cell_height=1,
     )
@@ -164,6 +174,7 @@ def test_convert_image_assemble_animated_gif(tmp_path):
     with Image.open(out_file) as im:
         assert getattr(im, "is_animated", False)
         assert int(getattr(im, "n_frames", 1)) == 2
+        assert int(im.info.get("loop", -1)) == 2
 
 
 def test_parse_args_ansi_format():
