@@ -438,6 +438,7 @@ def convert_image(
     gif_loop: int = 0,
     cell_width: int = ONE_CHAR_WIDTH,
     cell_height: int = ONE_CHAR_HEIGHT,
+    html_mode: str = "spans",
     progress_callback: Callable[[int, int], None] | None = None,
 ) -> None:
     """
@@ -476,6 +477,9 @@ def convert_image(
         cell_height (int): Height (in pixels) of one character cell when
             rendering `format=image`. Also used for aspect correction when
             resizing.
+        html_mode (str): HTML output mode when `output_format=html`.
+            - `spans`: one span per character with inline styles (smaller code complexity)
+            - `compact`: CSS classes + run grouping (smaller HTML output)
         progress_callback (callable, optional): Callback invoked as
             ``progress_callback(current, total)`` to report the number of
             processed rows.
@@ -543,6 +547,9 @@ def convert_image(
     if gif_loop < 0:
         raise ValueError("gif_loop must be >= 0")
 
+    if html_mode not in ("spans", "compact"):
+        raise ValueError("html_mode must be one of: spans, compact")
+
     cell_width = int(cell_width)
     cell_height = int(cell_height)
     if cell_width <= 0 or cell_height <= 0:
@@ -573,6 +580,14 @@ def convert_image(
         width, height = frame.size
         frame_rgb = frame.convert("RGB")
         rgb_bytes = memoryview(frame_rgb.tobytes())
+        html_css: str | None = None
+        html_color_bytes = rgb_bytes
+        if output_format == "html" and html_mode == "compact" and not mono:
+            try:
+                quant = frame_rgb.quantize(colors=64).convert("RGB")
+                html_color_bytes = memoryview(quant.tobytes())
+            except Exception:
+                html_color_bytes = rgb_bytes
         stride = width * 3
         lut = CHAR_LUT
 
@@ -937,7 +952,222 @@ def convert_image(
                         progress_callback(y + 1, height)
         elif output_format == "html":
             assert html_lines is not None
-            if dither == "none":
+            if html_mode == "compact":
+                color_to_idx: dict[tuple[int, int, int], int] = {}
+                idx_to_color: list[tuple[int, int, int]] = []
+
+                def _cls(rgb: tuple[int, int, int]) -> int:
+                    idx = color_to_idx.get(rgb)
+                    if idx is None:
+                        idx = len(idx_to_color)
+                        color_to_idx[rgb] = idx
+                        idx_to_color.append(rgb)
+                    return idx
+
+                def _flush_run(
+                    line_parts: list[str], run_idx: int | None, run_buf: list[str]
+                ) -> None:
+                    if run_idx is None or not run_buf:
+                        return
+                    line_parts.append(
+                        f'<span class="c{run_idx}">{html.escape("".join(run_buf))}</span>'
+                    )
+
+                def _mono_rgb(v: int) -> tuple[int, int, int]:
+                    gq = (int(v) // 16) * 16
+                    return (gq, gq, gq)
+
+                if dither == "none":
+                    for y in range(height):
+                        row = rgb_bytes[y * stride : (y + 1) * stride]
+                        crow = html_color_bytes[y * stride : (y + 1) * stride]
+                        line_parts: list[str] = []
+                        run_idx: int | None = None
+                        run_buf: list[str] = []
+                        off = 0
+                        for _ in range(width):
+                            r = row[off]
+                            g = row[off + 1]
+                            b = row[off + 2]
+                            h = (
+                                (r + g + b) // 3
+                                if is_avg
+                                else (wr * r + wg * g + wb * b) >> 8
+                            )
+                            ch = lut[h]
+                            if mono:
+                                rgb = _mono_rgb(h)
+                            else:
+                                rgb = (
+                                    int(crow[off]),
+                                    int(crow[off + 1]),
+                                    int(crow[off + 2]),
+                                )
+                            idx = _cls(rgb)
+                            if run_idx is None:
+                                run_idx = idx
+                                run_buf = [ch]
+                            elif idx == run_idx:
+                                run_buf.append(ch)
+                            else:
+                                _flush_run(line_parts, run_idx, run_buf)
+                                run_idx = idx
+                                run_buf = [ch]
+                            off += 3
+                        _flush_run(line_parts, run_idx, run_buf)
+                        html_lines.append("".join(line_parts))
+                        if progress:
+                            progress.update(1)
+                        if progress_callback:
+                            progress_callback(y + 1, height)
+                elif dither == "floyd-steinberg":
+                    err_curr = [0.0] * (width + 2)
+                    err_next = [0.0] * (width + 2)
+                    for y in range(height):
+                        row = rgb_bytes[y * stride : (y + 1) * stride]
+                        crow = html_color_bytes[y * stride : (y + 1) * stride]
+                        err_curr, err_next = err_next, [0.0] * (width + 2)
+                        line_parts = []
+                        run_idx = None
+                        run_buf = []
+                        off = 0
+                        for x in range(width):
+                            r = row[off]
+                            g = row[off + 1]
+                            b = row[off + 2]
+                            base = (
+                                (r + g + b) // 3
+                                if is_avg
+                                else (wr * r + wg * g + wb * b) >> 8
+                            )
+                            v = float(base) + err_curr[x + 1]
+                            if v < 0.0:
+                                v = 0.0
+                            elif v > 255.0:
+                                v = 255.0
+                            if levels_m1 <= 0:
+                                qh = 0
+                            else:
+                                qidx = int(v * levels_m1 / 255.0 + 0.5)
+                                if qidx < 0:
+                                    qidx = 0
+                                elif qidx > levels_m1:
+                                    qidx = levels_m1
+                                qh = int(qidx * 255.0 / levels_m1 + 0.5)
+                            err = v - float(qh)
+                            err_curr[x + 2] += err * (7.0 / 16.0)
+                            err_next[x + 0] += err * (3.0 / 16.0)
+                            err_next[x + 1] += err * (5.0 / 16.0)
+                            err_next[x + 2] += err * (1.0 / 16.0)
+                            ch = lut[qh]
+                            if mono:
+                                rgb = _mono_rgb(qh)
+                            else:
+                                rgb = (
+                                    int(crow[off]),
+                                    int(crow[off + 1]),
+                                    int(crow[off + 2]),
+                                )
+                            idx = _cls(rgb)
+                            if run_idx is None:
+                                run_idx = idx
+                                run_buf = [ch]
+                            elif idx == run_idx:
+                                run_buf.append(ch)
+                            else:
+                                _flush_run(line_parts, run_idx, run_buf)
+                                run_idx = idx
+                                run_buf = [ch]
+                            off += 3
+                        _flush_run(line_parts, run_idx, run_buf)
+                        html_lines.append("".join(line_parts))
+                        if progress:
+                            progress.update(1)
+                        if progress_callback:
+                            progress_callback(y + 1, height)
+                else:  # atkinson
+                    err_curr = [0.0] * (width + 4)
+                    err_next = [0.0] * (width + 4)
+                    err_next2 = [0.0] * (width + 4)
+                    for y in range(height):
+                        row = rgb_bytes[y * stride : (y + 1) * stride]
+                        crow = html_color_bytes[y * stride : (y + 1) * stride]
+                        err_curr, err_next, err_next2 = (
+                            err_next,
+                            err_next2,
+                            [0.0] * (width + 4),
+                        )
+                        line_parts = []
+                        run_idx = None
+                        run_buf = []
+                        off = 0
+                        for x in range(width):
+                            r = row[off]
+                            g = row[off + 1]
+                            b = row[off + 2]
+                            base = (
+                                (r + g + b) // 3
+                                if is_avg
+                                else (wr * r + wg * g + wb * b) >> 8
+                            )
+                            idx0 = x + 2
+                            v = float(base) + err_curr[idx0]
+                            if v < 0.0:
+                                v = 0.0
+                            elif v > 255.0:
+                                v = 255.0
+                            if levels_m1 <= 0:
+                                qh = 0
+                            else:
+                                qidx = int(v * levels_m1 / 255.0 + 0.5)
+                                if qidx < 0:
+                                    qidx = 0
+                                elif qidx > levels_m1:
+                                    qidx = levels_m1
+                                qh = int(qidx * 255.0 / levels_m1 + 0.5)
+                            err = (v - float(qh)) / 8.0
+                            err_curr[idx0 + 1] += err
+                            err_curr[idx0 + 2] += err
+                            err_next[idx0 - 1] += err
+                            err_next[idx0 + 0] += err
+                            err_next[idx0 + 1] += err
+                            err_next2[idx0 + 0] += err
+                            ch = lut[qh]
+                            if mono:
+                                rgb = _mono_rgb(qh)
+                            else:
+                                rgb = (
+                                    int(crow[off]),
+                                    int(crow[off + 1]),
+                                    int(crow[off + 2]),
+                                )
+                            idx = _cls(rgb)
+                            if run_idx is None:
+                                run_idx = idx
+                                run_buf = [ch]
+                            elif idx == run_idx:
+                                run_buf.append(ch)
+                            else:
+                                _flush_run(line_parts, run_idx, run_buf)
+                                run_idx = idx
+                                run_buf = [ch]
+                            off += 3
+                        _flush_run(line_parts, run_idx, run_buf)
+                        html_lines.append("".join(line_parts))
+                        if progress:
+                            progress.update(1)
+                        if progress_callback:
+                            progress_callback(y + 1, height)
+
+                css_rules = [
+                    "<style>",
+                    "pre.ascii{font-family:monospace;line-height:1;}",
+                ]
+                for i, (r, g, b) in enumerate(idx_to_color):
+                    css_rules.append(f".c{i}{{color:rgb({r},{g},{b})}}")
+                css_rules.append("</style>")
+                html_css = "\n".join(css_rules)
+            elif dither == "none":
                 if is_avg:
                     for y in range(height):
                         row = rgb_bytes[y * stride : (y + 1) * stride]
@@ -1285,9 +1515,15 @@ def convert_image(
             elif output_format == "html":
                 assert html_lines is not None
                 html_content = "<br>\n".join(html_lines)
+                head = f"<head><meta charset='utf-8'>{html_css or ''}</head>"
+                pre_open = (
+                    "<pre class='ascii'>"
+                    if html_css
+                    else "<pre style='font-family:monospace;'>"
+                )
                 page = (
-                    f"<html><body style='background-color:rgb({bg_brightness},{bg_brightness},{bg_brightness});'>"
-                    f"<pre style='font-family:monospace;'>{html_content}</pre></body></html>"
+                    f"<html>{head}<body style='background-color:rgb({bg_brightness},{bg_brightness},{bg_brightness});'>"
+                    f"{pre_open}{html_content}</pre></body></html>"
                 )
                 with open(
                     os.path.join(output_dir, file_stem + ".html"), "w", encoding="utf-8"

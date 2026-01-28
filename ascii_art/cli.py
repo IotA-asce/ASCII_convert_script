@@ -56,6 +56,12 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
         help="Output format",
     )
     parser.add_argument(
+        "--html",
+        dest="html_mode",
+        choices=["spans", "compact"],
+        help="HTML output mode (only used when --format html)",
+    )
+    parser.add_argument(
         "--dynamic-set",
         action="store_true",
         help="Generate character set dynamically using charset.generate_char_array",
@@ -140,6 +146,7 @@ def main():
     output_format = args.format if args.format is not None else format_cfg
     grayscale_mode = args.grayscale if args.grayscale is not None else "avg"
     dither_mode = args.dither if args.dither is not None else "none"
+    html_mode = args.html_mode if args.html_mode is not None else "spans"
 
     cell_width = _validate_cell_size(
         args.cell_width if args.cell_width is not None else ONE_CHAR_WIDTH
@@ -188,6 +195,7 @@ def main():
                 font_path=args.font,
                 grayscale_mode=grayscale_mode,
                 dither=dither_mode,
+                html_mode=html_mode,
                 cell_width=cell_width,
                 cell_height=cell_height,
             )
@@ -210,6 +218,7 @@ def main():
             font_path=args.font,
             grayscale_mode=grayscale_mode,
             dither=dither_mode,
+            html_mode=html_mode,
             cell_width=cell_width,
             cell_height=cell_height,
         )

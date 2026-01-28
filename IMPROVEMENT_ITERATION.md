@@ -34,9 +34,9 @@ Each section is a self-contained checklist.
 - [x] Document limitations (palette, file size, fps)
 
 ## 6) Compact HTML output (feature + performance)
-- [ ] Add `--html {spans,compact}`
-- [ ] Implement palette quantization + CSS classes to shrink file size
-- [ ] Optionally group repeated runs of identical style
+- [x] Add `--html {spans,compact}`
+- [x] Implement palette quantization + CSS classes to shrink file size
+- [x] Optionally group repeated runs of identical style
 - [ ] Add an example HTML output in `docs/examples/`
 
 ## 7) New output formats (feature)

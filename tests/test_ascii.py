@@ -31,6 +31,7 @@ def test_parse_args_defaults():
     assert args.gif_fps is None
     assert args.gif_loop is None
     assert args.video_out is None
+    assert args.html_mode is None
 
 
 def test_parse_args_grayscale_flag():
@@ -63,6 +64,12 @@ def test_parse_args_gif_flags():
 def test_parse_args_video_out_flag():
     args = ascii_mod.parse_args(["--video-out", "mp4"])
     assert args.video_out == "mp4"
+
+
+def test_parse_args_html_mode_flag():
+    args = ascii_mod.parse_args(["--format", "html", "--html", "compact"])
+    assert args.format == "html"
+    assert args.html_mode == "compact"
 
 
 def test_convert_image_dither_floyd_steinberg_tiny_gradient(tmp_path):
@@ -181,6 +188,31 @@ def test_convert_image_assemble_animated_gif(tmp_path):
         assert getattr(im, "is_animated", False)
         assert int(getattr(im, "n_frames", 1)) == 2
         assert int(im.info.get("loop", -1)) == 2
+
+
+def test_convert_image_html_compact_output(tmp_path):
+    img = Image.new("RGB", (1, 1), color=(255, 0, 0))
+    test_path = tmp_path / "html.png"
+    img.save(test_path)
+    out_dir = tmp_path / "out"
+
+    ascii_mod.convert_image(
+        test_path,
+        scale_factor=1.0,
+        bg_brightness=0,
+        output_dir=out_dir,
+        output_format="html",
+        html_mode="compact",
+        cell_width=1,
+        cell_height=1,
+    )
+
+    out_file = out_dir / f"O_h_0_f_1.0_{test_path.stem}.html"
+    content = out_file.read_text(encoding="utf-8")
+    assert "<style>" in content
+    assert "pre.ascii" in content
+    assert "class='ascii'" in content
+    assert ".c0" in content
 
 
 def test_parse_args_ansi_format():
