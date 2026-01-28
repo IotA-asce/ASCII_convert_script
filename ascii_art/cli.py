@@ -1,7 +1,7 @@
 import argparse
 import configparser
-import os
 from pathlib import Path
+from typing import Sequence
 
 from .converter import (
     convert_image,
@@ -12,7 +12,19 @@ from .converter import (
 )
 
 
-def parse_args(args=None):
+def _validate_scale(val: float) -> float:
+    if not 0 < val <= 1:
+        raise ValueError("Scale factor must be between 0 and 1")
+    return val
+
+
+def _validate_brightness(val: int) -> int:
+    if not 0 <= val <= 255:
+        raise ValueError("Brightness must be between 0 and 255")
+    return val
+
+
+def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Convert images to ASCII art")
     parser.add_argument("--input", help="Name of the input image file")
     parser.add_argument("--batch", help="Convert all images in the given directory")
@@ -70,22 +82,10 @@ def main():
     args = parse_args()
     load_char_array(dynamic=args.dynamic_set, font_path=args.font)
 
-    def _validate_scale(val: float) -> float:
-        if not 0 < val <= 1:
-            raise ValueError("Scale factor must be between 0 and 1")
-        return val
-
-    def _validate_brightness(val: int) -> int:
-        if not 0 <= val <= 255:
-            raise ValueError("Brightness must be between 0 and 255")
-        return val
-
     factor = args.scale if args.scale is not None else scale_cfg
     factor = _validate_scale(factor)
 
-    bg_brightness = (
-        args.brightness if args.brightness is not None else brightness_cfg
-    )
+    bg_brightness = args.brightness if args.brightness is not None else brightness_cfg
     bg_brightness = _validate_brightness(bg_brightness)
 
     output_dir = args.output_dir if args.output_dir is not None else output_dir_cfg
@@ -107,11 +107,8 @@ def main():
             font_path=args.font,
         )
     elif args.batch:
-        names = [
-            os.path.join(args.batch, n)
-            for n in os.listdir(args.batch)
-            if os.path.isfile(os.path.join(args.batch, n))
-        ]
+        batch_dir = Path(args.batch)
+        names = [str(p) for p in batch_dir.iterdir() if p.is_file()]
         progress = loader(total=len(names), desc="Images")
         for full_path in names:
             convert_image(
@@ -129,9 +126,6 @@ def main():
         image_name = args.input
         if image_name is None:
             image_name = list_files_from_assets()
-        elif not os.path.isfile(os.path.join("./assets/input", image_name)):
-            print(f"Input file '{image_name}' not found")
-            return
         convert_image(
             image_name,
             factor,

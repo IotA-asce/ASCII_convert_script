@@ -3,7 +3,8 @@ pillow
 
 # Optional dependencies
 # tqdm provides a progress bar in the CLI
-# tkinterdnd2 enables drag-and-drop in the GUI (requires tkinter)
+# streamlit provides the web GUI
 tqdm
-tkinterdnd2
-# tkinter is part of the standard library but may require separate installation for GUI support
+streamlit
+streamlit-webrtc
+numpy

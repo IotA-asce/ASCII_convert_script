@@ -56,37 +56,39 @@ def test_parse_args_font_flag(tmp_path):
 
 def test_convert_image_text_output(tmp_path):
     img = Image.new("RGB", (1, 1), color=(255, 255, 255))
-    input_dir = Path("assets/input")
+    input_dir = tmp_path / "input"
     input_dir.mkdir(parents=True, exist_ok=True)
     test_name = "test.png"
     test_path = input_dir / test_name
     img.save(test_path)
+    out_dir = tmp_path / "out"
     ascii_mod.convert_image(
         test_path,
         scale_factor=1.0,
         bg_brightness=0,
-        output_dir=tmp_path,
+        output_dir=out_dir,
         output_format="text",
     )
-    out_file = tmp_path / f"O_h_0_f_1.0_{test_path.stem}.txt"
+    out_file = out_dir / f"O_h_0_f_1.0_{test_path.stem}.txt"
     assert out_file.exists()
 
 
 def test_convert_image_ansi_stdout(tmp_path, capsys):
     img = Image.new("RGB", (1, 1), color=(255, 255, 255))
-    input_dir = Path("assets/input")
+    input_dir = tmp_path / "input"
     input_dir.mkdir(parents=True, exist_ok=True)
     test_name = "test_ansi.png"
     test_path = input_dir / test_name
     img.save(test_path)
+    out_dir = tmp_path / "out"
     ascii_mod.convert_image(
         test_path,
         scale_factor=1.0,
         bg_brightness=0,
-        output_dir=tmp_path,
+        output_dir=out_dir,
         output_format="ansi",
     )
-    assert list(tmp_path.iterdir()) == []
+    assert not out_dir.exists() or list(out_dir.iterdir()) == []
     captured = capsys.readouterr().out
     expected_char = ascii_mod.get_char(255)
     expected_line = f"\x1b[38;2;255;255;255m{expected_char}\x1b[0m"
@@ -95,16 +97,17 @@ def test_convert_image_ansi_stdout(tmp_path, capsys):
 
 def test_convert_image_mono_ansi_stdout(tmp_path, capsys):
     img = Image.new("RGB", (1, 1), color=(255, 0, 0))
-    input_dir = Path("assets/input")
+    input_dir = tmp_path / "input"
     input_dir.mkdir(parents=True, exist_ok=True)
     test_name = "test_mono_ansi.png"
     test_path = input_dir / test_name
     img.save(test_path)
+    out_dir = tmp_path / "out"
     ascii_mod.convert_image(
         test_path,
         scale_factor=1.0,
         bg_brightness=0,
-        output_dir=tmp_path,
+        output_dir=out_dir,
         output_format="ansi",
         mono=True,
     )
@@ -130,7 +133,7 @@ def test_convert_image_pil_input(tmp_path):
 
 def test_convert_image_progress_callback(tmp_path):
     img = Image.new("RGB", (2, 2), color=(255, 255, 255))
-    input_dir = Path("assets/input")
+    input_dir = tmp_path / "input"
     input_dir.mkdir(parents=True, exist_ok=True)
     test_name = "test_progress.png"
     test_path = input_dir / test_name
@@ -144,7 +147,7 @@ def test_convert_image_progress_callback(tmp_path):
         test_path,
         scale_factor=1.0,
         bg_brightness=0,
-        output_dir=tmp_path,
+        output_dir=tmp_path / "out",
         output_format="text",
         progress_callback=cb,
     )

@@ -1,1 +1,5 @@
 /assets/output/
+.venv/
+.ruff_cache/
+__pycache__/
+.DS_Store

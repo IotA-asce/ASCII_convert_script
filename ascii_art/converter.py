@@ -3,6 +3,7 @@ import os
 import sys
 import math
 from pathlib import Path
+from typing import Any, Callable
 
 from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
@@ -15,25 +16,262 @@ except ModuleNotFoundError:  # pragma: no cover - fallback when tqdm is missing
 
 # Default character array – can be replaced by a dynamically generated one
 char_array = [
-    ' ', '`', '¨', '·', '¸', '.', '-', "'", ',', '¹', ':', '_', '¯', '~',
-    '¬', '¦', ';', '¡', '!', '÷', '*', '*', 'ı', '|', '+', '<', '>', '/',
-    '=', '»', '«', 'ì', 'í', 'ï', 'i', '^', 'º', '_r', 'L', 'ª', '®', 'ī',
-    'ĩ', 'î', 'ĭ', 'l', '¿', 'J', '×', 'v', '?', 'c', 'į', ')', 'Ĺ', 'Ŀ',
-    '(', 'Y', 'T', 'Ļ', 'Ľ', 'ĺ', '7', '¤', 't', 'ľ', 'ŀ', 'Ł', '}', '{',
-    'F', 'ċ', 'ļ', 's', 'ĸ', 'Ý', '[', 'x', 'ć', 'z', 'ç', '1', 'I', ']',
-    'ł', 'j', 'Ĵ', 'C', 'y', 'V', '£', '5', '2', 'f', '3', 'ĉ', 'č', 'n',
-    'Ì', 'Í', 'İ', '¢', 'ĵ', 'U', 'X', 'Ć', 'Z', 'Ċ', 'S', 'u', 'Ï', 'Þ',
-    'P', 'Į', 'Ç', 'K', 'A', 'o', 'ÿ', 'ý', 'a', 'e', '4', 'Ĭ', 'E', 'Î',
-    'Č', 'Ĉ', 'Ī', 'Ĩ', 'Ú', 'Ù', 'ń', 'ņ', 'ŉ', 'k', 'Ü', 'Á', 'À', 'ù',
-    'ú', 'ü', '¥', 'ė', 'w', 'H', 'È', 'É', 'Ä', 'Å', 'ö', 'Ė', 'ò', 'G',
-    'ó', 'Ķ', 'ä', 'Û', 'á', 'à', 'Ą', 'ë', 'é', 'è', '_h', 'ą', 'ę', 'Ë',
-    'å', 'ñ', 'ň', 'Ę', 'O', 'Ă', '$', 'Â', 'û', 'Ĕ', 'Ā', 'Ě', 'Ê', 'Ã',
-    'Æ', 'R', 'ā', 'D', 'ē', 'ķ', 'õ', '½', 'Ē', 'p', 'ã', 'ô', 'ă', 'Ġ',
-    'â', 'ĕ', '9', '6', 'ê', 'ě', 'q', '¼', 'Ĳ', 'm', 'N', '%', '0', 'Ģ',
-    'ħ', '_b', 'Ò', 'Ó', '#', 'ø', '_d', 'Ö', 'Ĥ', 'Ğ', '§', 'Ĝ', 'W', 'M',
-    'B', 'æ', 'Ð', 'Đ', 'Q', 'Ô', '©', 'Ń', 'Ħ', '8', 'ĥ', 'Õ', '_g', 'Ď',
-    'Ņ', 'ĳ', 'đ', 'ß', 'þ', 'Ň', 'ð', '@', 'Ŋ', 'Ñ', '¾', 'ġ', 'Ø', 'ģ',
-    'ď', 'ğ', '&', 'ĝ'
+    " ",
+    "`",
+    "¨",
+    "·",
+    "¸",
+    ".",
+    "-",
+    "'",
+    ",",
+    "¹",
+    ":",
+    "_",
+    "¯",
+    "~",
+    "¬",
+    "¦",
+    ";",
+    "¡",
+    "!",
+    "÷",
+    "*",
+    "*",
+    "ı",
+    "|",
+    "+",
+    "<",
+    ">",
+    "/",
+    "=",
+    "»",
+    "«",
+    "ì",
+    "í",
+    "ï",
+    "i",
+    "^",
+    "º",
+    "_r",
+    "L",
+    "ª",
+    "®",
+    "ī",
+    "ĩ",
+    "î",
+    "ĭ",
+    "l",
+    "¿",
+    "J",
+    "×",
+    "v",
+    "?",
+    "c",
+    "į",
+    ")",
+    "Ĺ",
+    "Ŀ",
+    "(",
+    "Y",
+    "T",
+    "Ļ",
+    "Ľ",
+    "ĺ",
+    "7",
+    "¤",
+    "t",
+    "ľ",
+    "ŀ",
+    "Ł",
+    "}",
+    "{",
+    "F",
+    "ċ",
+    "ļ",
+    "s",
+    "ĸ",
+    "Ý",
+    "[",
+    "x",
+    "ć",
+    "z",
+    "ç",
+    "1",
+    "I",
+    "]",
+    "ł",
+    "j",
+    "Ĵ",
+    "C",
+    "y",
+    "V",
+    "£",
+    "5",
+    "2",
+    "f",
+    "3",
+    "ĉ",
+    "č",
+    "n",
+    "Ì",
+    "Í",
+    "İ",
+    "¢",
+    "ĵ",
+    "U",
+    "X",
+    "Ć",
+    "Z",
+    "Ċ",
+    "S",
+    "u",
+    "Ï",
+    "Þ",
+    "P",
+    "Į",
+    "Ç",
+    "K",
+    "A",
+    "o",
+    "ÿ",
+    "ý",
+    "a",
+    "e",
+    "4",
+    "Ĭ",
+    "E",
+    "Î",
+    "Č",
+    "Ĉ",
+    "Ī",
+    "Ĩ",
+    "Ú",
+    "Ù",
+    "ń",
+    "ņ",
+    "ŉ",
+    "k",
+    "Ü",
+    "Á",
+    "À",
+    "ù",
+    "ú",
+    "ü",
+    "¥",
+    "ė",
+    "w",
+    "H",
+    "È",
+    "É",
+    "Ä",
+    "Å",
+    "ö",
+    "Ė",
+    "ò",
+    "G",
+    "ó",
+    "Ķ",
+    "ä",
+    "Û",
+    "á",
+    "à",
+    "Ą",
+    "ë",
+    "é",
+    "è",
+    "_h",
+    "ą",
+    "ę",
+    "Ë",
+    "å",
+    "ñ",
+    "ň",
+    "Ę",
+    "O",
+    "Ă",
+    "$",
+    "Â",
+    "û",
+    "Ĕ",
+    "Ā",
+    "Ě",
+    "Ê",
+    "Ã",
+    "Æ",
+    "R",
+    "ā",
+    "D",
+    "ē",
+    "ķ",
+    "õ",
+    "½",
+    "Ē",
+    "p",
+    "ã",
+    "ô",
+    "ă",
+    "Ġ",
+    "â",
+    "ĕ",
+    "9",
+    "6",
+    "ê",
+    "ě",
+    "q",
+    "¼",
+    "Ĳ",
+    "m",
+    "N",
+    "%",
+    "0",
+    "Ģ",
+    "ħ",
+    "_b",
+    "Ò",
+    "Ó",
+    "#",
+    "ø",
+    "_d",
+    "Ö",
+    "Ĥ",
+    "Ğ",
+    "§",
+    "Ĝ",
+    "W",
+    "M",
+    "B",
+    "æ",
+    "Ð",
+    "Đ",
+    "Q",
+    "Ô",
+    "©",
+    "Ń",
+    "Ħ",
+    "8",
+    "ĥ",
+    "Õ",
+    "_g",
+    "Ď",
+    "Ņ",
+    "ĳ",
+    "đ",
+    "ß",
+    "þ",
+    "Ň",
+    "ð",
+    "@",
+    "Ŋ",
+    "Ñ",
+    "¾",
+    "ġ",
+    "Ø",
+    "ģ",
+    "ď",
+    "ğ",
+    "&",
+    "ĝ",
 ]
 
 
@@ -51,10 +289,25 @@ ONE_CHAR_HEIGHT = 18
 OUTPUT_IMAGE_PREFIX = "FrameOut"  # output image file name prefix
 INPUT_FILE_PREFIX = "Frame"  # input file name prefix
 
-LOADER_STATE = False
+
+class _DummyLoader:
+    def __init__(self, total: int | None):
+        self.total = total or 0
+        self.count = 0
+
+    def update(self, n: int = 1) -> None:
+        if not self.total:
+            return
+        self.count += n
+        percent = (self.count / self.total) * 100
+        sys.stdout.write(f"\rprocessing - {percent}\t%")
+
+    def close(self) -> None:
+        if self.total:
+            sys.stdout.write("\n")
 
 
-def load_char_array(dynamic=False, font_path=None):
+def load_char_array(dynamic: bool = False, font_path: str | None = None) -> None:
     """Load the character array either statically or by computing it.
 
     If ``dynamic`` is ``True`` and ``font_path`` points to a valid TTF file,
@@ -72,9 +325,9 @@ def load_char_array(dynamic=False, font_path=None):
     _recompute_interval()
 
 
-def get_char(input_int):
+def get_char(input_int: int) -> str:
     """
-    Returns a character from the `char_array` list based on the given `input_int` 
+    Returns a character from the `char_array` list based on the given `input_int`
     which represents the brightness value of the pixel at hand
 
     Args:
@@ -84,8 +337,6 @@ def get_char(input_int):
         A character (string) from the `char_array` list
     """
     return char_array[math.floor(input_int * INTERVAL)]
-
-
 
 
 def list_files_from_assets():
@@ -100,10 +351,10 @@ def list_files_from_assets():
         If the "./assets/input/" directory contains three image files:
 
             "image1.jpg", "image2.jpg" and "image3.jpg"
-        
+
         then calling `list_files_from_assets()` will output:
-        
-        Available choice -> 
+
+        Available choice ->
 
         _________________________________________________
 
@@ -130,16 +381,16 @@ def list_files_from_assets():
 
 
 def convert_image(
-    input_name,
-    scale_factor=0.2,
-    bg_brightness=30,
-    output_dir="./assets/output",
-    output_format="image",
-    base_name=None,
-    mono=False,
-    font_path=None,
-    progress_callback=None,
-):
+    input_name: Any,
+    scale_factor: float = 0.2,
+    bg_brightness: int = 30,
+    output_dir: str = "./assets/output",
+    output_format: str = "image",
+    base_name: str | None = None,
+    mono: bool = False,
+    font_path: str | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> None:
     """
     Converts an image file to an ASCII art representation, and saves the output
     image to ``output_dir`` with a filename that includes the chosen parameters
@@ -172,29 +423,22 @@ def convert_image(
         to ``./assets/output/O_h:50_f_0.1_image1.jpg``.
     """
 
-    if isinstance(input_name, Image.Image):
-        _im = input_name
-        if base_name is None:
-            base_name = "frame"
-    else:
-        input_name = os.fspath(input_name)
+    def _resolve_input_image(name, default_base_name: str) -> tuple[Image.Image, str]:
+        if isinstance(name, Image.Image):
+            return name, default_base_name
+        name = os.fspath(name)
         input_path = (
-            input_name
-            if os.path.isabs(input_name) or os.path.exists(input_name)
-            else os.path.join("./assets/input", input_name)
+            name
+            if os.path.isabs(name) or os.path.exists(name)
+            else os.path.join("./assets/input", name)
         )
         try:
-            _im = Image.open(input_path)
+            return Image.open(input_path), Path(name).stem
         except FileNotFoundError:
-            print(f"Input file '{input_name}' not found")
-            return
-        if base_name is None:
-            base_name = Path(input_name).stem
+            print(f"Input file '{name}' not found")
+            raise
 
-    # Try to load a monospaced font from common locations. Fallback to the
-    # default Pillow font if none of the paths exist. ``font_path`` may point
-    # to a custom TTF font to use if it can be loaded.
-    def _load_font(user_font):
+    def _load_font(user_font: str | None) -> ImageFont.ImageFont:
         windows_font = r"C:\\Windows\\Fonts\\lucon.ttf"
         linux_font = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
         if user_font:
@@ -208,9 +452,15 @@ def convert_image(
             return ImageFont.truetype(linux_font, ONE_CHAR_HEIGHT)
         return ImageFont.load_default()
 
+    try:
+        _im, resolved_base = _resolve_input_image(input_name, base_name or "frame")
+    except FileNotFoundError:
+        return
+    if base_name is None:
+        base_name = resolved_base
+
     fnt = _load_font(font_path)
 
-    ascii_grid = []
     frames = [_im]
     if getattr(_im, "is_animated", False):
         frames = [frame.copy() for frame in ImageSequence.Iterator(_im)]
@@ -227,6 +477,8 @@ def convert_image(
         width, height = frame.size
         pix = frame.load()
 
+        output_image = None
+        draw = None
         if output_format == "image":
             output_image = Image.new(
                 "RGB",
@@ -235,15 +487,23 @@ def convert_image(
             )
             draw = ImageDraw.Draw(output_image)
 
-        ascii_lines = []
-        progress = None if progress_callback else loader(
-            total=height * width,
-            desc=f"Frame {frame_index + 1}/{len(frames)}" if len(frames) > 1 else "Pixels",
+        ascii_lines: list[Any] = []
+        collect_lines = output_format in ("text", "html", "ansi")
+
+        progress = (
+            None
+            if progress_callback
+            else loader(
+                total=height * width,
+                desc=f"Frame {frame_index + 1}/{len(frames)}"
+                if len(frames) > 1
+                else "Pixels",
+            )
         )
         if progress_callback:
             progress_callback(0, height)
         for i in range(height):
-            line = []
+            line: list[Any] = []
             for j in range(width):
                 if progress:
                     progress.update(1)
@@ -252,6 +512,7 @@ def convert_image(
                 pix[j, i] = (_h, _h, _h)
                 ch = get_char(_h)
                 if output_format == "image":
+                    assert draw is not None
                     color = (_h, _h, _h) if mono else (_r, _g, _b)
                     draw.text(
                         (j * ONE_CHAR_WIDTH, i * ONE_CHAR_HEIGHT),
@@ -269,7 +530,7 @@ def convert_image(
                         line.append(f"\x1b[38;2;{_h};{_h};{_h}m{ch}")
                     else:
                         line.append(f"\x1b[38;2;{_r};{_g};{_b}m{ch}")
-            if output_format in ("text", "html", "ansi"):
+            if collect_lines:
                 ascii_lines.append(line)
             if progress_callback:
                 progress_callback(i + 1, height)
@@ -283,6 +544,7 @@ def convert_image(
                 file_stem += f"_{frame_index}"
 
             if output_format == "image":
+                assert output_image is not None
                 output_image.save(os.path.join(output_dir, file_stem + ".png"))
             elif output_format == "text":
                 lines = ["".join(l) for l in ascii_lines]
@@ -293,7 +555,7 @@ def convert_image(
             elif output_format == "html":
                 html_lines = []
                 for line in ascii_lines:
-                    html_line = ''.join(
+                    html_line = "".join(
                         f'<span style="color:rgb({r},{g},{b})">{html.escape(ch)}</span>'
                         for ch, (r, g, b) in line
                     )
@@ -387,6 +649,7 @@ def convert_video(
         gif_path = os.path.join(output_dir, f"{base}.gif")
         imageio.mimsave(gif_path, frames_for_gif, fps=24)
 
+
 def print_divider():
     print("\n_________________________________________________")
 
@@ -399,22 +662,6 @@ def loader(total=None, **kwargs):
     """
 
     if tqdm is None:
-        class _DummyLoader:
-            def __init__(self, total):
-                self.total = total or 0
-                self.count = 0
-
-            def update(self, n=1):
-                if not self.total:
-                    return
-                self.count += n
-                percent = (self.count / self.total) * 100
-                sys.stdout.write(f"\rprocessing - {percent}\t%")
-
-            def close(self):
-                if self.total:
-                    sys.stdout.write("\n")
-
         return _DummyLoader(total)
 
     return tqdm(total=total, **kwargs)
