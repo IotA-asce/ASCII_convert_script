@@ -24,7 +24,7 @@ Each section is a self-contained checklist.
 ## 4) Faster `format=image` rendering (performance)
 - [x] Cache per-character glyph masks for the chosen font + size
 - [x] Replace per-character `ImageDraw.text` calls with batched compositing
-- [ ] Add `scripts/benchmark.py` (time + output dimensions)
+- [x] Add `scripts/benchmark.py` (time + output dimensions)
 - [ ] Track regressions with an optional benchmark job in CI
 
 ## 5) Animated outputs (feature)
