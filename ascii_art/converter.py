@@ -292,6 +292,38 @@ _recompute_interval()
 ONE_CHAR_WIDTH = 10
 ONE_CHAR_HEIGHT = 18
 
+# Cache glyph masks for faster `format=image` rendering.
+# Keyed by (font_key, cell_width, cell_height, char_set).
+_GLYPH_MASK_CACHE: dict[
+    tuple[str, int, int, tuple[str, ...]], dict[str, Image.Image]
+] = {}
+
+
+def _glyph_masks(
+    *,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    cell_width: int,
+    cell_height: int,
+    font_key: str,
+    chars: list[str],
+) -> dict[str, Image.Image]:
+    key = (font_key, int(cell_width), int(cell_height), tuple(chars))
+    cached = _GLYPH_MASK_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    masks: dict[str, Image.Image] = {}
+    # Preserve order while removing duplicates.
+    unique_chars = list(dict.fromkeys(chars))
+    for ch in unique_chars:
+        im = Image.new("L", (int(cell_width), int(cell_height)), color=0)
+        d = ImageDraw.Draw(im)
+        d.text((0, 0), ch, font=font, fill=255)
+        masks[ch] = im
+    _GLYPH_MASK_CACHE[key] = masks
+    return masks
+
+
 OUTPUT_IMAGE_PREFIX = "FrameOut"  # output image file name prefix
 INPUT_FILE_PREFIX = "Frame"  # input file name prefix
 
@@ -535,6 +567,7 @@ def convert_image(
 
         output_image = None
         draw = None
+        glyph_masks: dict[str, Image.Image] | None = None
         if output_format == "image":
             output_image = Image.new(
                 "RGB",
@@ -542,6 +575,14 @@ def convert_image(
                 color=(bg_brightness, bg_brightness, bg_brightness),
             )
             draw = ImageDraw.Draw(output_image)
+            font_key = str(getattr(fnt, "path", "") or font_path or "default")
+            glyph_masks = _glyph_masks(
+                font=fnt,
+                cell_width=cell_width,
+                cell_height=cell_height,
+                font_key=font_key,
+                chars=char_array,
+            )
 
         text_lines: list[str] | None = None
         html_lines: list[str] | None = None
@@ -565,6 +606,10 @@ def convert_image(
             progress_callback(0, height)
         if output_format == "image":
             assert draw is not None
+            assert output_image is not None
+            assert glyph_masks is not None
+            paste = output_image.paste
+            draw_text = draw.text
             x_positions = [x * cell_width for x in range(width)]
             if dither == "none":
                 if is_avg:
@@ -580,12 +625,16 @@ def convert_image(
                             h = (r + g + b) // 3
                             ch = lut[h]
                             color = (h, h, h) if mono else (r, g, b)
-                            draw.text(
-                                (x_positions[x], y_pos),
-                                ch,
-                                font=fnt,
-                                fill=color,
-                            )
+                            mask = glyph_masks.get(ch)
+                            if mask is None:
+                                draw_text(
+                                    (x_positions[x], y_pos),
+                                    ch,
+                                    font=fnt,
+                                    fill=color,
+                                )
+                            else:
+                                paste(color, (x_positions[x], y_pos), mask)
                         if progress:
                             progress.update(1)
                         if progress_callback:
@@ -603,12 +652,16 @@ def convert_image(
                             h = (wr * r + wg * g + wb * b) >> 8
                             ch = lut[h]
                             color = (h, h, h) if mono else (r, g, b)
-                            draw.text(
-                                (x_positions[x], y_pos),
-                                ch,
-                                font=fnt,
-                                fill=color,
-                            )
+                            mask = glyph_masks.get(ch)
+                            if mask is None:
+                                draw_text(
+                                    (x_positions[x], y_pos),
+                                    ch,
+                                    font=fnt,
+                                    fill=color,
+                                )
+                            else:
+                                paste(color, (x_positions[x], y_pos), mask)
                         if progress:
                             progress.update(1)
                         if progress_callback:
@@ -653,12 +706,16 @@ def convert_image(
 
                         ch = lut[qh]
                         color = (qh, qh, qh) if mono else (r, g, b)
-                        draw.text(
-                            (x_positions[x], y_pos),
-                            ch,
-                            font=fnt,
-                            fill=color,
-                        )
+                        mask = glyph_masks.get(ch)
+                        if mask is None:
+                            draw_text(
+                                (x_positions[x], y_pos),
+                                ch,
+                                font=fnt,
+                                fill=color,
+                            )
+                        else:
+                            paste(color, (x_positions[x], y_pos), mask)
                     if progress:
                         progress.update(1)
                     if progress_callback:
@@ -711,12 +768,16 @@ def convert_image(
 
                         ch = lut[qh]
                         color = (qh, qh, qh) if mono else (r, g, b)
-                        draw.text(
-                            (x_positions[x], y_pos),
-                            ch,
-                            font=fnt,
-                            fill=color,
-                        )
+                        mask = glyph_masks.get(ch)
+                        if mask is None:
+                            draw_text(
+                                (x_positions[x], y_pos),
+                                ch,
+                                font=fnt,
+                                fill=color,
+                            )
+                        else:
+                            paste(color, (x_positions[x], y_pos), mask)
                     if progress:
                         progress.update(1)
                     if progress_callback:

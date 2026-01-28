@@ -22,8 +22,8 @@ Each section is a self-contained checklist.
 - [x] Add a smoke test for non-default cell sizes
 
 ## 4) Faster `format=image` rendering (performance)
-- [ ] Cache per-character glyph masks for the chosen font + size
-- [ ] Replace per-character `ImageDraw.text` calls with batched compositing
+- [x] Cache per-character glyph masks for the chosen font + size
+- [x] Replace per-character `ImageDraw.text` calls with batched compositing
 - [ ] Add `scripts/benchmark.py` (time + output dimensions)
 - [ ] Track regressions with an optional benchmark job in CI
 
