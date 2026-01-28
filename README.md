@@ -304,9 +304,28 @@ Video/webcam conversion requires extra dependencies that are not listed in
 python -m pip install opencv-python imageio
 ```
 
+Animated image inputs (GIF/WebP)
+- Use `--assemble` with `--format image` to write a single animated GIF.
+- Use `--gif-fps` to override timing and `--gif-loop` to control looping.
+
+Limitations
+- GIF output is palette-based; colors may shift and smooth gradients can band.
+- Large input dimensions or high `--scale` can produce very large GIF/MP4 files.
+- `--video-out mp4` requires `ffmpeg` installed and on your PATH.
+
 Example
 ```bash
 python -m ascii_art.cli --video "/path/to/movie.mp4" --scale 0.2 --format image
+```
+
+Assemble video frames into a GIF
+```bash
+python -m ascii_art.cli --video "/path/to/movie.mp4" --format image --video-out gif
+```
+
+Assemble video frames into an MP4 (requires ffmpeg)
+```bash
+python -m ascii_art.cli --video "/path/to/movie.mp4" --format image --video-out mp4
 ```
 
 ## Generating custom character sets
