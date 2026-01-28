@@ -37,7 +37,7 @@ Each section is a self-contained checklist.
 - [x] Add `--html {spans,compact}`
 - [x] Implement palette quantization + CSS classes to shrink file size
 - [x] Optionally group repeated runs of identical style
-- [ ] Add an example HTML output in `docs/examples/`
+- [x] Add an example HTML output in `docs/examples/`
 
 ## 7) New output formats (feature)
 - [ ] Add `--format md` (markdown with fenced code blocks)
