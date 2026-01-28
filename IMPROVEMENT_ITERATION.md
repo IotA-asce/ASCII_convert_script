@@ -25,7 +25,7 @@ Each section is a self-contained checklist.
 - [x] Cache per-character glyph masks for the chosen font + size
 - [x] Replace per-character `ImageDraw.text` calls with batched compositing
 - [x] Add `scripts/benchmark.py` (time + output dimensions)
-- [ ] Track regressions with an optional benchmark job in CI
+- [x] Track regressions with an optional benchmark job in CI
 
 ## 5) Animated outputs (feature)
 - [ ] Add `--assemble` for animated input images (GIF/WebP) to write an animated GIF

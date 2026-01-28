@@ -1,0 +1,45 @@
+name: Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "Number of runs per benchmark"
+        required: false
+        default: "3"
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps (minimal)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pillow
+
+      - name: Sanity check (compile)
+        run: python -m compileall ascii_art scripts
+
+      - name: Benchmark (text)
+        run: |
+          python scripts/benchmark.py \
+            --input "assets/input/IMG20230214135212.jpg" \
+            --format text \
+            --runs "${{ github.event.inputs.runs }}" \
+            --scale 0.20
+
+      - name: Benchmark (image)
+        run: |
+          python scripts/benchmark.py \
+            --input "assets/input/IMG20230214135212.jpg" \
+            --format image \
+            --runs "${{ github.event.inputs.runs }}" \
+            --scale 0.20
