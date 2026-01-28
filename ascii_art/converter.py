@@ -1327,6 +1327,7 @@ def convert_video(
     output_dir="./assets/output",
     output_format="image",
     assemble=False,
+    video_out: str | None = None,
     mono=False,
     font_path=None,
     grayscale_mode: str = "avg",
@@ -1342,14 +1343,19 @@ def convert_video(
         bg_brightness: Background brightness for the output.
         output_dir: Directory to store generated frames.
         output_format: Output format passed to ``convert_image``.
-        assemble: If ``True`` and ``output_format`` is ``image``, frames are
-            assembled into an animated GIF using ``imageio``.
+        assemble: Legacy flag. Prefer ``video_out``.
+        video_out: One of: ``frames`` (default), ``gif``, ``mp4``.
         mono: Render frames in grayscale instead of colour.
         font_path: Optional path to a TTF font used for rendering.
     """
 
     import cv2
-    import imageio
+    import shutil
+    import subprocess
+
+    out_mode = video_out or ("gif" if assemble else "frames")
+    if out_mode not in ("frames", "gif", "mp4"):
+        raise ValueError("video_out must be one of: frames, gif, mp4")
 
     cap = cv2.VideoCapture(0 if video_path is None else video_path)
     if not cap.isOpened():
@@ -1386,7 +1392,9 @@ def convert_video(
             cell_width=cell_width,
             cell_height=cell_height,
         )
-        if assemble and output_format == "image":
+        if out_mode == "gif" and output_format == "image":
+            import imageio
+
             out_path = os.path.join(
                 output_dir,
                 f"O_h_{bg_brightness}_f_{scale_factor}_{frame_name}.png",
@@ -1398,9 +1406,39 @@ def convert_video(
     cap.release()
     progress.close()
 
-    if assemble and frames_for_gif:
+    if out_mode == "gif" and frames_for_gif:
+        import imageio
+
         gif_path = os.path.join(output_dir, f"{base}.gif")
         imageio.mimsave(gif_path, frames_for_gif, fps=24)
+
+    if out_mode == "mp4" and output_format == "image":
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            print("ffmpeg not found; install it or use --video-out frames/gif")
+            return
+
+        pattern = os.path.join(
+            output_dir, f"O_h_{bg_brightness}_f_{scale_factor}_{base}_%05d.png"
+        )
+        out_path = os.path.join(output_dir, f"{base}.mp4")
+        cmd = [
+            ffmpeg,
+            "-y",
+            "-framerate",
+            "24",
+            "-i",
+            pattern,
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            out_path,
+        ]
+        try:
+            subprocess.run(cmd, check=True)
+        except subprocess.CalledProcessError as exc:
+            print(f"ffmpeg failed with exit code {exc.returncode}")
 
 
 def print_divider():

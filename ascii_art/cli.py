@@ -71,6 +71,11 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
         help="Use webcam for live capture",
     )
     parser.add_argument(
+        "--video-out",
+        choices=["frames", "gif", "mp4"],
+        help="Video output mode",
+    )
+    parser.add_argument(
         "--mono",
         action="store_true",
         help="Render ASCII art in grayscale instead of colour",
@@ -149,13 +154,15 @@ def main():
 
     if args.video or args.webcam:
         source = None if args.webcam else args.video
+        video_out = args.video_out or ("gif" if args.assemble else "frames")
         convert_video(
             source,
             scale_factor=factor,
             bg_brightness=bg_brightness,
             output_dir=output_dir,
             output_format=output_format,
-            assemble=args.assemble,
+            assemble=False,
+            video_out=video_out,
             mono=args.mono,
             font_path=args.font,
             grayscale_mode=grayscale_mode,

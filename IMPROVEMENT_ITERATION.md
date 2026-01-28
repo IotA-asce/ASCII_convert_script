@@ -30,7 +30,7 @@ Each section is a self-contained checklist.
 ## 5) Animated outputs (feature)
 - [x] Add `--assemble` for animated input images (GIF/WebP) to write an animated GIF
 - [x] Add `--gif-fps` / `--gif-loop` options
-- [ ] Add `--video-out {frames,gif,mp4}` (mp4 via ffmpeg if available)
+- [x] Add `--video-out {frames,gif,mp4}` (mp4 via ffmpeg if available)
 - [ ] Document limitations (palette, file size, fps)
 
 ## 6) Compact HTML output (feature + performance)

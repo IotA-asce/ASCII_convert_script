@@ -30,6 +30,7 @@ def test_parse_args_defaults():
     assert args.assemble is False
     assert args.gif_fps is None
     assert args.gif_loop is None
+    assert args.video_out is None
 
 
 def test_parse_args_grayscale_flag():
@@ -57,6 +58,11 @@ def test_parse_args_gif_flags():
     args = ascii_mod.parse_args(["--gif-fps", "12", "--gif-loop", "2"])
     assert args.gif_fps == 12.0
     assert args.gif_loop == 2
+
+
+def test_parse_args_video_out_flag():
+    args = ascii_mod.parse_args(["--video-out", "mp4"])
+    assert args.video_out == "mp4"
 
 
 def test_convert_image_dither_floyd_steinberg_tiny_gradient(tmp_path):
