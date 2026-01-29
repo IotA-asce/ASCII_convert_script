@@ -104,6 +104,7 @@ Each section is a self-contained checklist.
 - [ ] Add smoothing / attack-release sliders for audio response
 - [ ] Add an optional "reduce colors when loud" mode
 - [ ] Add a record button to export a short GIF/MP4 clip
+- [x] Stabilize live output size (avoid webcam display jitter when audio changes scale)
 
 ## 18) Testing improvements (quality)
 - [ ] Add deterministic snapshot tests for text outputs

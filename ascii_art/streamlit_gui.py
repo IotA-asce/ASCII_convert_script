@@ -25,6 +25,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 # Pillow changed resampling constants to an enum; use getattr for compatibility.
 _RESAMPLE_NEAREST = getattr(getattr(Image, "Resampling", Image), "NEAREST")
+_RESAMPLE_BILINEAR = getattr(getattr(Image, "Resampling", Image), "BILINEAR")
+_RESAMPLE_BOX = getattr(getattr(Image, "Resampling", Image), "BOX")
 
 # When Streamlit runs a script by path (e.g. `streamlit run ascii_art/streamlit_gui.py`)
 # it adds the script directory (`ascii_art/`) to `sys.path`, not the repo root.
@@ -186,6 +188,7 @@ def _render_ascii_image(
     img: Image.Image,
     *,
     scale_factor: float,
+    detail_scale: float | None = None,
     bg_brightness: int,
     mono: bool,
     font_path: str | None,
@@ -215,17 +218,31 @@ def _render_ascii_image(
         return ImageFont.load_default()
 
     width, height = img.size
-    new_w = max(1, int(scale_factor * width))
-    new_h = max(
+    detail_scale = float(scale_factor) if detail_scale is None else float(detail_scale)
+    base_w = max(1, int(float(scale_factor) * width))
+    base_h = max(
         1,
-        int(scale_factor * height * (float(cell_width) / float(cell_height))),
+        int(float(scale_factor) * height * (float(cell_width) / float(cell_height))),
     )
-    frame = img.resize((new_w, new_h), _RESAMPLE_NEAREST).convert("RGB")
+    detail_w = max(1, int(detail_scale * width))
+    detail_h = max(
+        1,
+        int(detail_scale * height * (float(cell_width) / float(cell_height))),
+    )
+    # Keep output size fixed (base_w/base_h). Modulate detail by downsampling the
+    # input to (detail_w/detail_h) and scaling back up to the fixed grid.
+    frame = img.convert("RGB")
+    if (detail_w, detail_h) != (base_w, base_h):
+        frame = frame.resize((detail_w, detail_h), _RESAMPLE_BOX).resize(
+            (base_w, base_h), _RESAMPLE_BILINEAR
+        )
+    else:
+        frame = frame.resize((base_w, base_h), _RESAMPLE_BILINEAR)
     pix = frame.load()
 
     out = Image.new(
         "RGB",
-        (int(cell_width) * new_w, int(cell_height) * new_h),
+        (int(cell_width) * base_w, int(cell_height) * base_h),
         color=(bg_brightness, bg_brightness, bg_brightness),
     )
     draw = ImageDraw.Draw(out)
@@ -253,8 +270,8 @@ def _render_ascii_image(
     levels_m1 = max(1, levels - 1)
 
     if dither == "none":
-        for y in range(new_h):
-            for x in range(new_w):
+        for y in range(base_h):
+            for x in range(base_w):
                 r, g, b = pix[x, y]
                 if is_avg:
                     h = (r + g + b) // 3
@@ -271,11 +288,11 @@ def _render_ascii_image(
         return out
 
     if dither == "floyd-steinberg":
-        err_curr = [0.0] * (new_w + 2)
-        err_next = [0.0] * (new_w + 2)
-        for y in range(new_h):
-            err_curr, err_next = err_next, [0.0] * (new_w + 2)
-            for x in range(new_w):
+        err_curr = [0.0] * (base_w + 2)
+        err_next = [0.0] * (base_w + 2)
+        for y in range(base_h):
+            err_curr, err_next = err_next, [0.0] * (base_w + 2)
+            for x in range(base_w):
                 r, g, b = pix[x, y]
                 base = (r + g + b) // 3 if is_avg else (wr * r + wg * g + wb * b) >> 8
                 v = float(base) + err_curr[x + 1]
@@ -309,12 +326,12 @@ def _render_ascii_image(
         return out
 
     # atkinson
-    err_curr = [0.0] * (new_w + 4)
-    err_next = [0.0] * (new_w + 4)
-    err_next2 = [0.0] * (new_w + 4)
-    for y in range(new_h):
-        err_curr, err_next, err_next2 = err_next, err_next2, [0.0] * (new_w + 4)
-        for x in range(new_w):
+    err_curr = [0.0] * (base_w + 4)
+    err_next = [0.0] * (base_w + 4)
+    err_next2 = [0.0] * (base_w + 4)
+    for y in range(base_h):
+        err_curr, err_next, err_next2 = err_next, err_next2, [0.0] * (base_w + 4)
+        for x in range(base_w):
             r, g, b = pix[x, y]
             base = (r + g + b) // 3 if is_avg else (wr * r + wg * g + wb * b) >> 8
             idx0 = x + 2
@@ -784,7 +801,8 @@ def run_app() -> None:
                 pil = Image.fromarray(frame.to_ndarray(format="rgb24"))
                 out = _render_ascii_image(
                     pil,
-                    scale_factor=float(dyn_scale),
+                    scale_factor=float(live_base_scale),
+                    detail_scale=float(dyn_scale),
                     bg_brightness=int(brightness),
                     mono=bool(live_mono),
                     font_path=font_path,
