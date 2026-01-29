@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="380" viewBox="0 0 1600 380" role="img" aria-label="ASCII Converter hero">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0f14" />
+      <stop offset="1" stop-color="#122235" />
+    </linearGradient>
+    <radialGradient id="glow" cx="35%" cy="35%" r="60%">
+      <stop offset="0" stop-color="#1b3b5a" stop-opacity="0.9" />
+      <stop offset="1" stop-color="#0b0f14" stop-opacity="0" />
+    </radialGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 H 0 V 40" fill="none" stroke="#1f2d3d" stroke-opacity="0.45" stroke-width="1" />
+      <path d="M 0 20 H 40 M 20 0 V 40" fill="none" stroke="#1f2d3d" stroke-opacity="0.25" stroke-width="1" />
+    </pattern>
+    <linearGradient id="scan" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.06" />
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0" />
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.05" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="380" fill="url(#bg)" />
+  <rect width="1600" height="380" fill="url(#glow)" />
+  <rect width="1600" height="380" fill="url(#grid)" />
+
+  <!-- Decorative "ASCII" lines -->
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="12" fill="#9fb6cc" opacity="0.55">
+    <text x="60" y="90">..::==++**##@@@ ASCII CONVERTER @@@##**++==::..</text>
+    <text x="60" y="112">[ upload ]  [ preview ]  [ convert ]  [ live webcam + audio ]</text>
+    <text x="60" y="134">scale: 0.25  brightness: 30  grayscale: luma601  dither: floyd-steinberg</text>
+  </g>
+
+  <!-- Title block (kept simple so it won't fight the Streamlit title) -->
+  <g>
+    <rect x="52" y="196" width="680" height="124" rx="14" fill="#0b0f14" opacity="0.65" stroke="#243041" stroke-width="2" />
+    <text x="84" y="246" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial" font-size="34" fill="#e5e7eb">ASCII Converter</text>
+    <text x="84" y="282" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial" font-size="16" fill="#b6c2cf">Image → ASCII (text / HTML / PNG) + Live webcam mode</text>
+    <text x="84" y="308" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="13" fill="#9fb6cc">Tip: louder audio -> less detail (fixed frame size)</text>
+  </g>
+
+  <!-- Scanline overlay -->
+  <rect width="1600" height="380" fill="url(#scan)" />
+</svg>

@@ -39,6 +39,7 @@ from ascii_art import converter
 
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
+UI_ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets" / "ui"
 
 
 DEFAULTS: dict[str, Any] = {
@@ -422,11 +423,49 @@ def run_app() -> None:
 
     st.set_page_config(page_title="ASCII Converter", layout="wide")
 
+    st.markdown(
+        """
+<style>
+  [data-testid="stAppViewContainer"]{
+    background:
+      radial-gradient(1200px 600px at 15% 10%, rgba(59,130,246,0.18), transparent 60%),
+      radial-gradient(900px 520px at 85% 0%, rgba(16,185,129,0.10), transparent 55%),
+      linear-gradient(180deg, #0b0f14 0%, #0b0f14 30%, #0a0e13 100%);
+  }
+  [data-testid="stSidebar"]{
+    background: linear-gradient(180deg, rgba(15,23,42,0.95) 0%, rgba(11,15,20,0.95) 100%);
+    border-right: 1px solid rgba(36,48,65,0.9);
+  }
+  .ascii-hero{ margin: 0 0 0.75rem 0; }
+  .ascii-hero svg{ width: 100%; height: auto; display: block; }
+  .ascii-hero img{ width: 100%; height: auto; display: block; border-radius: 14px; }
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+
     cfg = _load_config()
+
+    hero_png = UI_ASSETS_DIR / "hero.png"
+    hero_jpg = UI_ASSETS_DIR / "hero.jpg"
+    hero_svg = UI_ASSETS_DIR / "hero.svg"
+    if hero_png.exists() or hero_jpg.exists():
+        st.image(
+            str(hero_png if hero_png.exists() else hero_jpg),
+            use_container_width=True,
+        )
+    elif hero_svg.exists():
+        try:
+            st.markdown(
+                f"<div class='ascii-hero'>{hero_svg.read_text(encoding='utf-8')}</div>",
+                unsafe_allow_html=True,
+            )
+        except OSError:
+            pass
 
     st.title("ASCII Converter")
     st.caption(
-        "Convert images into ASCII art (image/text/html), with a live webcam mode where audio inversely modulates detail."
+        "Convert images into ASCII art (image/text/html). Live mode keeps a fixed frame size and modulates detail with audio."
     )
 
     with st.sidebar:
@@ -438,12 +477,14 @@ def run_app() -> None:
             max_value=1.0,
             value=float(cfg.get("scale", DEFAULTS["scale"])),
             step=0.05,
+            help="Upload tab scale: higher = more characters (more detail, slower).",
         )
         brightness = st.slider(
             "Background brightness",
             min_value=0,
             max_value=255,
             value=int(cfg.get("brightness", DEFAULTS["brightness"])),
+            help="Background behind characters for image/html outputs.",
         )
         grayscale_mode = st.selectbox(
             "Grayscale mode",
@@ -498,10 +539,12 @@ def run_app() -> None:
         dynamic_set = st.checkbox(
             "Dynamic character set",
             value=bool(cfg.get("dynamic_set", DEFAULTS["dynamic_set"])),
+            help="Regenerates the character ramp for the chosen font (slower the first time).",
         )
         output_dir = st.text_input(
             "Output directory",
             value=str(cfg.get("output_dir", DEFAULTS["output_dir"])),
+            help="Where converted files are written.",
         )
 
         st.subheader("Font (optional)")
@@ -524,6 +567,7 @@ def run_app() -> None:
 
         st.divider()
         save_defaults = st.button("Save as defaults")
+        reset_defaults = st.button("Reset saved defaults")
 
     if save_defaults:
         _save_config(
@@ -541,6 +585,14 @@ def run_app() -> None:
             }
         )
         st.success("Saved to config.json")
+
+    if reset_defaults:
+        try:
+            CONFIG_PATH.unlink()
+        except OSError:
+            pass
+        st.warning("Deleted config.json (saved defaults reset)")
+        st.rerun()
 
     tabs = st.tabs(["Upload", "Live (Webcam + Audio)"])
 

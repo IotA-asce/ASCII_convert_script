@@ -94,10 +94,10 @@ Each section is a self-contained checklist.
 - [ ] Add a small benchmark for batch conversion
 
 ## 16) Streamlit UX improvements (feature)
-- [ ] Add a "Reset to defaults" button
+- [x] Add a "Reset to defaults" button
 - [ ] Add a side-by-side view: input vs output, zoom, and scroll sync
 - [ ] Add a ZIP download option for batch outputs
-- [ ] Add tooltips that mirror CLI docs for each control
+- [x] Add tooltips that mirror CLI docs for each control
 
 ## 17) Live mode creative controls (feature)
 - [ ] Add audio mapping modes: inverse-scale (current), direct-scale, threshold, beat-detect
